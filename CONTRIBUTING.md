@@ -186,6 +186,7 @@ npm run dev
 | `npm run format:check`        | Checks the formatting, as CI does                                                                                                                                                                          |
 | `npm run commit`              | Writes a conventional commit message with commitizen                                                                                                                                                       |
 | `npm run check:bestpractices` | Checks `.bestpractices.json`, and that every file and heading it and `security-insights.yml` link to exists                                                                                                |
+| `npm run check:colours`       | Fails on a colour that isn't the value of a CSS custom property, in the stylesheets, pages and scripts (see [Coding Style](#coding-style))                                                                 |
 | `npm run check:repo`          | Validates `.github/dependabot.yml`, `vex.openvex.json` and `security-insights.yml` against their schemas in [`scripts/schemas/`](scripts/schemas/), and lints the workflows with actionlint and shellcheck |
 | `npm run bestpractices:url`   | Prints bestpractices.dev links that propose the answers in `.bestpractices.json` the site doesn't have yet, for the maintainer to review and save                                                          |
 
@@ -200,6 +201,15 @@ TypeScript in strict mode. A contribution must pass
 `npm run lint -- --max-warnings=0`, `npm run format:check` and
 `npm run typecheck`. All of them run in CI on every pull request, and a pull
 request that fails them can't be merged.
+
+Colours come from tokens, so both themes reach everything. Write a colour only
+as the value of a CSS custom property, such as `--app-bg: #1b1b1f`, define it
+for each theme, and use it with `var()`. `npm run check:colours` fails on any
+other colour in a stylesheet, a page's styles or a script's strings. Not
+checked: tests, comments, images such as `favicon.svg`, and
+`<meta name="theme-color">`, which the browser reads before any CSS. A colour
+in a script that is text, such as an example in an error message, goes after a
+`// check-colours-ignore-next-line: <why>` comment.
 
 #### Tests
 

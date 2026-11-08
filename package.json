@@ -23,7 +23,8 @@
     "check:repo": "node scripts/check-repo.mjs",
     "check:bestpractices": "node scripts/check-bestpractices.mjs",
     "bestpractices:url": "node scripts/bestpractices-url.mjs",
-    "check:colours": "node --import tsx scripts/check-colours.mjs"
+    "check:colours": "node --import tsx scripts/check-colours.mjs",
+    "images:logo": "node scripts/render-logo.mjs"
   },
   "repository": {
     "type": "git",

@@ -188,6 +188,7 @@ npm run dev
 | `npm run check:bestpractices` | Checks `.bestpractices.json`, and that every file and heading it and `security-insights.yml` link to exists                                                                                                |
 | `npm run check:colours`       | Fails on a colour that isn't the value of a CSS custom property, in the stylesheets, pages and scripts (see [Coding Style](#coding-style))                                                                 |
 | `npm run check:repo`          | Validates `.github/dependabot.yml`, `vex.openvex.json` and `security-insights.yml` against their schemas in [`scripts/schemas/`](scripts/schemas/), and lints the workflows with actionlint and shellcheck |
+| `npm run images:logo`         | Renders `favicon-32.png`, `apple-touch-icon.png` and the README banners in `site/public/logo/` from the favicon and the colour tokens, in Chrome with the site's fonts; needs Python with Pillow           |
 | `npm run bestpractices:url`   | Prints bestpractices.dev links that propose the answers in `.bestpractices.json` the site doesn't have yet, for the maintainer to review and save                                                          |
 
 `npm ci` also points Git at `.githooks/`, which signs off your commits (see

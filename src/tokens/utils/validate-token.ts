@@ -153,6 +153,7 @@ const color: Check = (value, field, fail) => {
       fail(TypeError, `${field}.hex`, 'a string', hex);
 
     if (!HEX_COLOR.test(hex as string))
+      // check-colours-ignore-next-line: an example in the error message
       fail(RangeError, `${field}.hex`, 'a 6 digit hex color like #0054f0', hex);
   }
 };

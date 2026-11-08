@@ -22,7 +22,8 @@
     "commit": "npx git-cz",
     "check:repo": "node scripts/check-repo.mjs",
     "check:bestpractices": "node scripts/check-bestpractices.mjs",
-    "bestpractices:url": "node scripts/bestpractices-url.mjs"
+    "bestpractices:url": "node scripts/bestpractices-url.mjs",
+    "check:colours": "node --import tsx scripts/check-colours.mjs"
   },
   "repository": {
     "type": "git",

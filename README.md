@@ -1,5 +1,10 @@
 # Design Token Flow
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./site/public/logo/banner-dark.png">
+  <img alt="Design Token Flow: see how design tokens relate: every token a pill, every alias a line" src="./site/public/logo/banner-light.png">
+</picture>
+
 [![Commitizen friendly](https://img.shields.io/badge/commitizen-friendly-brightgreen.svg)](https://commitizen.github.io/cz-cli/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-green.svg)](https://makeapullrequest.com)
 ![issues](https://img.shields.io/github/issues/phun-ky/site-design-token-flow)
@@ -43,7 +48,7 @@ npm run preview   # serve dist/
 npm run test:e2e  # build, then check the site in Google Chrome (see below)
 ```
 
-`npm run test:e2e` serves `dist/` like GitHub Pages (`e2e/serve.mjs`, gzipped, under `/site-design-token-flow/`) and runs the Playwright checks in `e2e/` with the installed Google Chrome: requests only to the site's own origin and no console errors, no horizontal scroll at 390, 768 and 1440 px in both themes, no axe violations (WCAG 2.2 A and AA) on any page in either theme, every link and referenced file resolves, zoom, pan, fit, the theme switch and the playground work, script and markup typed into the playground stay text, every page carries its Content Security Policy, and each page stays within its performance budget on a throttled phone (`e2e/performance.spec.ts`). CI runs them as "Website checks" and keeps the traces of a failed check.
+`npm run test:e2e` serves `dist/` like GitHub Pages (`e2e/serve.mjs`, gzipped, under `/site-design-token-flow/`) and runs the Playwright checks in `e2e/` with the installed Google Chrome: requests only to the site's own origin and no console errors, no horizontal scroll at 390, 768 and 1440 px in both themes, no axe violations (WCAG 2.2 A and AA) on any page in either theme, every link and referenced file resolves, zoom, pan, fit, the theme switch and the playground work, script and markup typed into the playground stay text, every page carries its Content Security Policy, the icons, banners and social card are served at their sizes with the mark at 3:1 contrast or more, and each page stays within its performance budget on a throttled phone (`e2e/performance.spec.ts`). CI runs them as "Website checks" and keeps the traces of a failed check.
 
 ## Structure
 
@@ -51,7 +56,7 @@ npm run test:e2e  # build, then check the site in Google Chrome (see below)
 - `src/main.ts`: the flow view. It lays tokens out in columns and draws the lines with [`@phun-ky/arclace`](https://www.npmjs.com/package/@phun-ky/arclace).
 - `src/assets/data/design-tokens.tokens.json`: the tokens shown, in the [DTCG 2025.10](https://www.designtokens.org/tr/2025.10/) format.
 - `src/assets/shiki/`: the code themes of the other phun-ky docs sites, used by the playground's syntax highlighting.
-- `site/public/`: copied to the build as they are: the favicon (`favicon.svg`, with `favicon-32.png` and `apple-touch-icon.png` rendered from it), the social card `og-image.png` (1200 by 630, rendered from the site's own pills in a headless browser), and `404.html` with `404.css`, which GitHub Pages serves for any missing path, so its URLs are absolute.
+- `site/public/`: copied to the build as they are: the favicon (`favicon.svg`, with `favicon-32.png` and `apple-touch-icon.png` rendered from it by `npm run images:logo`), the wave mark in `logo/` (`mark.svg` for light backgrounds, `mark-dark.svg`, and `mark-mono.svg` in `currentColor`) with the README banners rendered from the favicon, the social card `og-image.png` (1200 by 630, rendered from the site's own pills in a headless browser), and `404.html` with `404.css`, which GitHub Pages serves for any missing path, so its URLs are absolute.
 - `site/public/fonts/`: the IBM Plex Sans files the font tokens describe ([SIL Open Font License 1.1](site/public/fonts/LICENSE.txt)). Both pages load them from the tokens, so each font pill is shown in its own face.
 - `src/tokens/`: parses token files and renders pills. It is self-contained and will be extracted into its own package; see [its README](src/tokens/README.md).
 

@@ -37,6 +37,8 @@ jobs:
         run: npm run format:check
       - name: Type-check, tests included
         run: npm run typecheck
+      - name: Check that colours come from tokens
+        run: npm run check:colours
       - name: Check the OpenSSF Best Practices answers # and their links
         run: npm run check:bestpractices
       # Pinned releases, checked against the SHA-256 of the linux_amd64

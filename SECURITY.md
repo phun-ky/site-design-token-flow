@@ -102,6 +102,9 @@ base-uri 'none'; form-action 'none'
 - **Scripts** come only from the site. The one inline script, which applies the
   saved theme before the first paint, is allowed by its SHA-256 hash, computed
   at build time from the page itself, so it can't go stale.
+  The playground checks token JSON in a Web Worker, a script file from the
+  site that `script-src 'self'` allows; it gets the JSON by message and sends
+  nothing anywhere.
 - **Styles** come only from the site. `style` attributes are allowed because the
   pills set their swatch colours with them.
 - **Images and fonts** come only from the site. The fonts are the files the

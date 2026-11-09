@@ -24,18 +24,18 @@ A site that shows design tokens and how they relate: every token is drawn as a "
 
 Nothing to install: open the site in a current browser. Both pages work with a keyboard, and the switch in the header changes between the light and dark theme.
 
-**[Token flow](https://phun-ky.net/site-design-token-flow/)** shows every token as a pill: your own tokens from the playground, or the bundled example file. Base values are on the right, and each alias is joined by a line to the token it references, so you can follow a component token, such as a button background, down to the color it ends at. A line above the canvas says whose tokens are shown, with links to edit yours or to show the example.
+**[Token flow](https://phun-ky.net/site-design-token-flow/)** shows every token as a pill: your own tokens from the playground, or the bundled example file. Base values are on the right, and each alias is joined by a line to the token it references, so you can follow a component token, such as a button background, down to the color it ends at. The sidebar says which tokens are shown, lets you switch between yours and the example, and lists how to move around; on a phone it folds into a bar with an "About this flow" button. A large flow says what it is drawing while it draws.
 
 - **Move around:** scroll with the mouse wheel or two fingers on a trackpad (Shift and the wheel moves sideways), or drag the canvas. With the keyboard, focus it (Tab, or the "Skip to content" link) and use the arrow keys; Shift and an arrow key moves further.
 - **Zoom:** Ctrl (Cmd on a Mac) and the mouse wheel, or a pinch on a trackpad, zooms around the pointer, and the zoom buttons in the corner or the `+` and `-` keys zoom in steps. 100% is the flow fitted to the page width: `0` goes back to it, and `F` or "Fit to screen" fits the whole flow on the screen.
 
-**[Playground](https://phun-ky.net/site-design-token-flow/playground)** renders single tokens as pills, so you can try your own.
+**[Playground](https://phun-ky.net/site-design-token-flow/playground)** renders single tokens as pills, so you can try your own. Its sidebar holds where the tokens come from; the editor and the pills sit next to it.
 
-1. Pick the tokens to start from: a showcase with one token of every `$type`, the bundled token file, or your own: "Load a file" opens a `.json` token file of up to 2 MB, or drop one on the editor. The file is read in your browser and never uploaded, and the playground asks before it replaces edits of your own.
-2. Edit the [DTCG 2025.10](https://www.designtokens.org/tr/2025.10/) JSON on the left. The pills update as you type. Every problem in the tokens is listed under the editor, each naming the token and the field, such as a value that doesn't match its `$type` or a reference to a missing token, and the valid tokens are still shown.
-3. Filter the pills by name or `$type`, and select a pill to see its token, resolved value, the tokens it references and the HTML that renders it, which you can copy.
+1. Pick the tokens to start from: a showcase with one token of every `$type`, the bundled token file, or your own. "Load a file" opens a `.json` token file of up to 2 MB, and dropping one anywhere on the playground does the same. The file is read in your browser and never uploaded, with its progress and a Cancel button, then checked; when it would replace edits of your own, a dialog compares the two and asks first.
+2. Edit the [DTCG 2025.10](https://www.designtokens.org/tr/2025.10/) JSON. The pills update as you type, and the tokens are checked in the background, so a large file doesn't hold up the page. Every problem is listed in the sidebar, naming the token and the field, such as a value that doesn't match its `$type` or a reference to a missing token; select one to move the editor to its line. The valid tokens are still shown.
+3. Filter the pills by name or `$type`, and select a pill to see its token, resolved value, the tokens it references and the HTML that renders it, which you can copy. The details open next to the pills, or over the page on a phone; Esc or the close button closes them.
 
-What you type in the playground is saved in your browser, so it is there when you come back, and "Show your tokens in the flow" draws it in the flow view. While your edits have problems, the flow shows the last version without. Nothing is sent anywhere: the [security policy](SECURITY.md#security-expectations) lists what the site stores and where.
+What you type in the playground is saved in your browser, so it is there when you come back, and "Show in the flow" draws it in the flow view. While your edits have problems, the flow shows the last version without. Nothing is sent anywhere: the [security policy](SECURITY.md#security-expectations) lists what the site stores and where.
 
 ## Development
 

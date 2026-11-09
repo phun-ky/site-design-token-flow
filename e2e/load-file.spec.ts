@@ -1,6 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 
-// Loading a token file from your computer into the playground (#102)
+import { largeTokens } from './large-tokens';
+
+// Loading a token file from your computer into the playground (#102), with
+// progress (#109) and a dialog before it replaces your edits (#108)
 const TOKENS = {
   color: {
     $type: 'color',
@@ -15,8 +18,8 @@ const FILE = {
 };
 const pills = '#groups .design-token';
 const status = '#file-status';
-/** Drops a file on the editor, as dragging one from the desktop does */
-const drop = async (page: Page, file: typeof FILE) => {
+/** Drops a file on the playground, as dragging one from the desktop does */
+const drop = async (page: Page, file: typeof FILE, target = '#groups') => {
   const transfer = await page.evaluateHandle(
     ({ name, mimeType, text }) => {
       const data = new DataTransfer();
@@ -28,14 +31,28 @@ const drop = async (page: Page, file: typeof FILE) => {
     { name: file.name, mimeType: file.mimeType, text: file.buffer.toString() }
   );
 
-  await page.locator('.demo-source').dispatchEvent('dragover', {
+  await page.locator(target).dispatchEvent('dragover', {
     dataTransfer: transfer
   });
-  await expect(page.locator('.demo-source')).toHaveClass(/is-dropping/);
-  await page
-    .locator('.demo-source')
-    .dispatchEvent('drop', { dataTransfer: transfer });
+  await expect(page.locator('#drop')).toHaveClass(/is-dropping/);
+  await page.locator(target).dispatchEvent('drop', { dataTransfer: transfer });
 };
+/** Every text the status shows from now on */
+const recordStatus = (page: Page) =>
+  page.evaluate(() => {
+    const seen: string[] = [];
+    const element = document.querySelector('#file-status') as HTMLElement;
+
+    new MutationObserver(() => seen.push(element.textContent ?? '')).observe(
+      element,
+      { childList: true, subtree: true, characterData: true }
+    );
+    (window as unknown as { statusSeen: string[] }).statusSeen = seen;
+  });
+const statusSeen = (page: Page) =>
+  page.evaluate(
+    () => (window as unknown as { statusSeen: string[] }).statusSeen
+  );
 
 test.beforeEach(async ({ page }) => {
   await page.goto('playground');
@@ -44,14 +61,17 @@ test.beforeEach(async ({ page }) => {
   await page.waitForLoadState('networkidle');
 });
 
-test('loads a chosen file, saves it, and sends nothing anywhere', async ({
+test('loads a chosen file in steps, checks it in a worker, saves it, and sends nothing anywhere', async ({
   page
 }) => {
   const requests: string[] = [];
+  const workers: string[] = [];
 
   page.on('request', (request) =>
     requests.push(`${request.method()} ${request.url()}`)
   );
+  page.on('worker', (worker) => workers.push(worker.url()));
+  await recordStatus(page);
 
   const chooser = page.waitForEvent('filechooser');
 
@@ -59,25 +79,83 @@ test('loads a chosen file, saves it, and sends nothing anywhere', async ({
   await (await chooser).setFiles(FILE);
 
   await expect(page.locator(status)).toHaveText(
-    'Loaded "colors.tokens.json" (1 kB).'
+    'Loaded "colors.tokens.json" (1 kB): 2 tokens.'
   );
   await expect(page.locator(pills)).toHaveCount(2);
-  await expect(page.locator('#preset')).toHaveValue('custom');
+  await expect(page.getByLabel('Your tokens')).toBeChecked();
   await expect(page.locator('#to-flow')).toBeVisible();
+  // Nothing was sent, and the worker was already running for the editor
   expect(requests, 'requests while loading a file').toEqual([]);
+
+  const seen = await statusSeen(page);
+
+  expect(
+    seen.some((text) => text.startsWith('Reading "colors.tokens.json"'))
+  ).toBe(true);
+  expect(seen.some((text) => text.startsWith('Checking 2 tokens'))).toBe(true);
 
   await page.reload();
   await expect(page.locator('#source')).toHaveValue(FILE.buffer.toString());
+  expect(workers.some((url) => url.includes('validate-worker'))).toBe(true);
 });
 
-test('loads a file dropped on the editor', async ({ page }) => {
+test('loads a file dropped anywhere on the playground', async ({ page }) => {
   await drop(page, FILE);
 
   await expect(page.locator(status)).toHaveText(
-    'Loaded "colors.tokens.json" (1 kB).'
+    'Loaded "colors.tokens.json" (1 kB): 2 tokens.'
   );
-  await expect(page.locator('.demo-source')).not.toHaveClass(/is-dropping/);
+  await expect(page.locator('#drop')).not.toHaveClass(/is-dropping/);
   await expect(page.locator(pills)).toHaveCount(2);
+});
+
+test('loads a large file, and keeps the page usable while checking it', async ({
+  page
+}) => {
+  const text = JSON.stringify(largeTokens(), null, 2);
+
+  await page.locator('#file').setInputFiles({
+    name: 'large.tokens.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(text)
+  });
+  // The filter takes input while the worker checks
+  await page.locator('#filter').fill('brand');
+  await expect(page.locator(status)).toContainText(
+    'Loaded "large.tokens.json"'
+  );
+  await expect(page.locator(status)).toContainText('976 tokens');
+  await expect(page.locator(pills)).toHaveCount(20);
+});
+
+test('cancels reading a file, and keeps the editor', async ({ page }) => {
+  const before = await page.locator('#source').inputValue();
+
+  // A reader that reports progress and never finishes, so Cancel can be pressed
+  await page.evaluate(() => {
+    FileReader.prototype.readAsText = function () {
+      this.dispatchEvent(
+        new ProgressEvent('progress', {
+          loaded: 1,
+          total: 2,
+          lengthComputable: true
+        })
+      );
+    };
+    FileReader.prototype.abort = function () {
+      this.dispatchEvent(new ProgressEvent('abort'));
+    };
+  });
+  await page.locator('#file').setInputFiles(FILE);
+  await expect(page.locator(`${status} progress`)).toHaveAttribute(
+    'value',
+    '1'
+  );
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator(status)).toHaveText(
+    'Cancelled: "colors.tokens.json" was not loaded.'
+  );
+  await expect(page.locator('#source')).toHaveValue(before);
 });
 
 test('refuses a file that is too large or not text, and keeps the editor', async ({
@@ -113,31 +191,59 @@ test('validates a loaded file like typed text', async ({ page }) => {
     buffer: Buffer.from('{ "color": ')
   });
 
-  await expect(page.locator(status)).toHaveText('Loaded "broken.json" (1 kB).');
+  await expect(page.locator(status)).toHaveText(
+    'Loaded "broken.json" (1 kB): 0 tokens, 1 problem.'
+  );
   await expect(page.locator('#error li')).toHaveCount(1);
   await expect(page.locator(pills)).toHaveCount(0);
 });
 
-test('asks before a file replaces your edits', async ({ page }) => {
+test('asks in a modal dialog before a file replaces your edits', async ({
+  page
+}) => {
   const edits = JSON.stringify({ size: { $type: 'dimension' } });
+  const dialog = page.getByRole('dialog', {
+    name: 'Replace your edits with this file?'
+  });
 
   await page.locator('#source').fill(edits);
+  await expect(page.getByLabel('Your tokens')).toBeChecked();
   await page.locator('#file').setInputFiles(FILE);
-  await expect(page.locator(status)).toContainText(
-    '"colors.tokens.json" would replace your edits.'
+
+  await expect(dialog).toBeVisible();
+  // Both sides, counted before asking
+  await expect(dialog).toContainText(/Your edits\s*0 tokens\s*No problems/);
+  await expect(dialog).toContainText(
+    /colors\.tokens\.json\s*2 tokens\s*No problems/
   );
   await expect(
-    page.getByRole('button', { name: 'Replace them' })
+    page.getByRole('button', { name: 'Keep my edits' })
   ).toBeFocused();
+  // Modal: the page behind can't be used
+  expect(
+    await page.evaluate(() =>
+      (document.querySelector('#replace') as HTMLDialogElement).matches(
+        ':modal'
+      )
+    )
+  ).toBe(true);
 
   await page.getByRole('button', { name: 'Keep my edits' }).click();
+  await expect(dialog).toBeHidden();
   await expect(page.locator(status)).toHaveText(
     'Kept your edits. "colors.tokens.json" was not loaded.'
   );
   await expect(page.locator('#source')).toHaveValue(edits);
 
+  // Esc keeps them too
   await page.locator('#file').setInputFiles(FILE);
-  await page.getByRole('button', { name: 'Replace them' }).click();
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('#source')).toHaveValue(edits);
+
+  await page.locator('#file').setInputFiles(FILE);
+  await page.getByRole('button', { name: 'Replace with the file' }).click();
   await expect(page.locator('#source')).toHaveValue(FILE.buffer.toString());
   await expect(page.locator(pills)).toHaveCount(2);
 });

@@ -3,6 +3,13 @@ import './playground.css';
 
 import { Arclace } from '@phun-ky/arclace';
 
+import {
+  checkTokenText,
+  countTokens,
+  lineOfProblem,
+  type CheckedProblem,
+  type CheckedTokens
+} from '../src/app/check-tokens';
 import { loadFonts } from '../src/app/fonts';
 import { formatHtml } from '../src/app/format-html';
 import { mountHeader } from '../src/app/header';
@@ -18,17 +25,16 @@ import { formatBytes, refuseTokenFile } from '../src/app/token-file';
 import bundledTokens from '../src/assets/data/design-tokens.tokens.json';
 import {
   createDesignTokenElement,
-  DTCGDocument,
   fitWrappedValues,
   FlatDesignToken,
   getDesignTokenKind,
   getFontFaces,
   toCssValue,
-  renderDesignToken,
-  validateTokens
+  renderDesignToken
 } from '../src/tokens';
 
 import showcaseTokens from './showcase.tokens.json';
+import type { CheckRequest, CheckResponse } from './validate-worker';
 
 const PRESETS: Record<Exclude<Preset, 'custom'>, unknown> = {
   showcase: showcaseTokens,
@@ -39,15 +45,25 @@ const $ = <T extends HTMLElement>(selector: string) =>
 const sourceEl = $<HTMLTextAreaElement>('#source');
 const sourceBoxEl = $<HTMLElement>('.demo-source');
 const sourceCodeEl = $<HTMLElement>('.demo-source-code');
-const presetEl = $<HTMLSelectElement>('#preset');
+const presetEls = [
+  ...document.querySelectorAll<HTMLInputElement>('input[name="preset"]')
+];
+const bundledCountEl = $<HTMLSpanElement>('#bundled-count');
+const customCountEl = $<HTMLSpanElement>('#custom-count');
 const prefixEl = $<HTMLInputElement>('#prefix');
 const filterEl = $<HTMLInputElement>('#filter');
-const errorEl = $<HTMLDivElement>('#error');
+const problemsEl = $<HTMLElement>('#error');
+const problemsTitleEl = $<HTMLSpanElement>('#problems-title');
+const problemsListEl = problemsEl.querySelector('ul') as HTMLUListElement;
 const flowLinkEl = $<HTMLParagraphElement>('#to-flow');
+const flowHintEl = $<HTMLSpanElement>('#to-flow-hint');
+const savedEl = $<HTMLSpanElement>('#saved');
+const checkingEl = $<HTMLSpanElement>('#checking');
+const dropEl = $<HTMLElement>('#drop');
 const loadFileEl = $<HTMLButtonElement>('#load-file');
 const fileEl = $<HTMLInputElement>('#file');
-const fileStatusEl = $<HTMLParagraphElement>('#file-status');
-const flowHintEl = $<HTMLSpanElement>('#to-flow-hint');
+const fileStatusEl = $<HTMLDivElement>('#file-status');
+const replaceEl = $<HTMLDialogElement>('#replace');
 const groupsEl = $<HTMLDivElement>('#groups');
 const countEl = $<HTMLSpanElement>('#count');
 const detailsEl = $<HTMLElement>('#details');
@@ -67,6 +83,7 @@ groupsEl.append(listEl);
 document.fonts.addEventListener('loadingdone', () => fitWrappedValues(listEl));
 
 let tokens: FlatDesignToken[] = [];
+let problems: CheckedProblem[] = [];
 let selectedId: string | null = null;
 
 // Per-viewer convenience only: the preset and the JSON you edit stay in this
@@ -74,6 +91,12 @@ let selectedId: string | null = null;
 const store = browserStorage();
 const escape = (value: string) =>
   value.replace(/[&<>"]/g, (char) => `&#${char.charCodeAt(0)};`);
+const plural = (count: number, word: string) =>
+  `${count} ${word}${count === 1 ? '' : 's'}`;
+const preset = (): Preset =>
+  (presetEls.find((input) => input.checked)?.value as Preset) ?? 'showcase';
+const setPreset = (value: Preset) =>
+  presetEls.forEach((input) => (input.checked = input.value === value));
 
 // Syntax highlighting, once Shiki has loaded; plain text until then
 let colorize: Colorize | null = null;
@@ -121,56 +144,103 @@ sourceEl.addEventListener('scroll', () => {
   sourceCodeEl.scrollLeft = sourceEl.scrollLeft;
 });
 
-/** Lists the problems in the tokens under the editor, or hides the list */
-const showProblems = (messages: string[]) => {
-  const summary = document.createElement('p');
-  const list = document.createElement('ul');
+// Checking runs in a Web Worker, so a large file doesn't block the page
+// (#109); where workers are blocked, it runs here
+const worker = (() => {
+  try {
+    return new Worker(new URL('./validate-worker.ts', import.meta.url), {
+      type: 'module'
+    });
+  } catch {
+    return null;
+  }
+})();
+const waiting = new Map<number, (checked: CheckedTokens) => void>();
 
-  errorEl.hidden = messages.length === 0;
-  summary.setAttribute('role', 'alert');
-  summary.className = 'demo-error-summary';
-  summary.textContent =
-    messages.length === 1
-      ? '1 problem in the tokens'
-      : `${messages.length} problems in the tokens`;
-  list.append(
-    ...messages.map((message) => {
+let lastRequest = 0;
+
+worker?.addEventListener('message', (event: MessageEvent<CheckResponse>) => {
+  waiting.get(event.data.id)?.(event.data);
+  waiting.delete(event.data.id);
+});
+
+/** Checks token JSON, in the worker when there is one */
+const check = (text: string): Promise<CheckedTokens> => {
+  if (!worker) return Promise.resolve(checkTokenText(text));
+
+  const id = (lastRequest += 1);
+
+  return new Promise((resolve) => {
+    waiting.set(id, resolve);
+    worker.postMessage({ id, text } satisfies CheckRequest);
+  });
+};
+/**
+ * Shows that the tokens are being checked. It appears only when checking
+ * takes more than 300 ms (a CSS animation delay), so typing doesn't flicker.
+ */
+const showChecking = (text: string | null) => {
+  checkingEl.textContent = text
+    ? `Checking ${plural(countTokens(text), 'token')}`
+    : '';
+};
+/** Moves the editor to a line, and selects it */
+const goToLine = (line: number) => {
+  const lines = sourceEl.value.split('\n');
+  const start = lines
+    .slice(0, line - 1)
+    .reduce((sum, text) => sum + text.length + 1, 0);
+  const lineHeight = parseFloat(getComputedStyle(sourceEl).lineHeight) || 18;
+
+  sourceEl.focus();
+  sourceEl.setSelectionRange(start, start + (lines[line - 1]?.length ?? 0));
+  sourceEl.scrollTop = Math.max(0, (line - 3) * lineHeight);
+};
+/** Lists the problems in the sidebar, each moving the editor to its line */
+const showProblems = () => {
+  problemsEl.hidden = problems.length === 0;
+  problemsTitleEl.textContent = `${plural(problems.length, 'problem')} in the tokens`;
+  problemsListEl.replaceChildren(
+    ...problems.map((problem) => {
       const item = document.createElement('li');
+      const line = lineOfProblem(sourceEl.value, problem);
 
-      item.textContent = message;
+      if (line === null) {
+        item.textContent = problem.message;
+
+        return item;
+      }
+
+      const button = document.createElement('button');
+      const where = document.createElement('span');
+
+      button.type = 'button';
+      button.className = 'demo-problem';
+      where.className = 'demo-problem-line';
+      where.textContent = `Line ${line}`;
+      button.append(where, problem.message);
+      button.addEventListener('click', () => goToLine(line));
+      item.append(button);
 
       return item;
     })
   );
-  errorEl.replaceChildren(...(messages.length ? [summary, list] : []));
 };
-// Shows the valid tokens, and lists every problem in the others
-const parse = () => {
-  try {
-    const result = validateTokens(JSON.parse(sourceEl.value) as DTCGDocument);
+/** What the sidebar says about your tokens, and whether they are saved */
+const showSaved = () => {
+  const saved = readSaved(store);
 
-    tokens = result.tokens;
-    // Fonts the tokens describe; the Content Security Policy only allows
-    // files from the site itself
-    loadFonts(getFontFaces(tokens));
-    showProblems(result.problems.map(({ message }) => message));
-
-    // Your edits without problems: the version the flow view falls back to
-    // while you fix a later one
-    if (
-      result.problems.length === 0 &&
-      tokens.length > 0 &&
-      readSaved(store).custom === sourceEl.value
-    )
-      writeSaved(store, { valid: sourceEl.value });
-  } catch (error) {
-    // Not JSON
-    tokens = [];
-    showProblems([(error as Error).message]);
-  }
-
-  render();
-  showFlowLink();
+  customCountEl.textContent = !store
+    ? 'Your browser blocks storage, so they are not kept'
+    : saved.custom === undefined
+      ? 'None yet: type, paste or load a file'
+      : 'Saved in this browser';
+  savedEl.textContent =
+    preset() !== 'custom'
+      ? 'Editing it starts your own tokens'
+      : store
+        ? 'Saved in this browser'
+        : 'Not saved: your browser blocks storage';
 };
 // "Show in the flow", once you have tokens of your own without problems
 const showFlowLink = () => {
@@ -178,6 +248,45 @@ const showFlowLink = () => {
 
   flowLinkEl.hidden = flow.kind !== 'yours';
   flowHintEl.hidden = flow.kind !== 'yours' || flow.latest;
+};
+/** Shows checked tokens: the pills, the problems and what is saved */
+const apply = (checked: CheckedTokens, text: string) => {
+  tokens = checked.tokens;
+  problems = checked.problems;
+  // Fonts the tokens describe; the Content Security Policy only allows
+  // files from the site itself
+  loadFonts(getFontFaces(tokens));
+
+  // Your edits without problems: the version the flow view falls back to
+  // while you fix a later one
+  if (
+    problems.length === 0 &&
+    tokens.length > 0 &&
+    readSaved(store).custom === text
+  )
+    writeSaved(store, { valid: text });
+
+  showProblems();
+  render();
+  showSaved();
+  showFlowLink();
+};
+
+let lastParse = 0;
+
+// Checks the editor's text and shows the result; a newer edit wins
+const parse = async () => {
+  const run = (lastParse += 1);
+  const text = sourceEl.value;
+
+  showChecking(text);
+
+  const checked = await check(text);
+
+  if (run !== lastParse) return;
+
+  showChecking(null);
+  apply(checked, text);
 };
 const render = () => {
   const query = filterEl.value.trim().toLowerCase();
@@ -231,9 +340,14 @@ const render = () => {
   // Wrapped values as wide as their widest line, not the pill's maximum
   fitWrappedValues(listEl);
 
+  // A selected token that is gone closes the details
+  if (selectedId && !byId(selectedId)) closeDetails(false);
+
   highlight(selectedId);
 };
 const byId = (id: string | null) => tokens.find((token) => token.id === id);
+const pillFor = (tokenId: string) =>
+  listEl.querySelector<HTMLElement>(`[data-demo-id="${CSS.escape(tokenId)}"]`);
 const highlight = (id: string | null) => {
   const token = byId(id);
   const related = new Set([
@@ -250,10 +364,6 @@ const highlight = (id: string | null) => {
   });
 
   // Arrows point from the referenced token to the token that references it
-  const pillFor = (tokenId: string) =>
-    listEl.querySelector<HTMLElement>(
-      `[data-demo-id="${CSS.escape(tokenId)}"]`
-    );
   const pill = token ? pillFor(token.id) : null;
 
   arclace.clear();
@@ -280,6 +390,8 @@ const relationButtons = (ids: string[]) =>
         )
         .join(' ')
     : '<span class="demo-muted">none</span>';
+const CLOSE_ICON =
+  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6 6 18"/></svg>';
 const select = (id: string | null) => {
   const token = byId(id);
 
@@ -299,8 +411,10 @@ const select = (id: string | null) => {
   }
 
   detailsEl.innerHTML = `
-    <button type="button" class="demo-link demo-back" data-back>Back to the pill</button>
-    <h2 tabindex="-1">${escape(token.name)}</h2>
+    <div class="demo-details-head">
+      <h2 tabindex="-1">${escape(token.name)}</h2>
+      <button type="button" class="demo-icon-button" data-close aria-label="Close the details">${CLOSE_ICON}</button>
+    </div>
     <dl class="demo-dl">
       <dt>id</dt><dd><code>${escape(token.id)}</code></dd>
       <dt>$type</dt><dd><code>${escape(token.$type)}</code></dd>
@@ -318,6 +432,10 @@ const select = (id: string | null) => {
     <h3><code>renderDesignToken()</code> <button type="button" class="demo-link" id="copy">copy</button></h3>
     ${codeBlock(formatHtml(html), 'html', 'demo-html')}
   `;
+  detailsEl.hidden = false;
+  document.body.classList.add('has-details');
+  // The details narrow the pills, which can move the selected one out of view
+  pillFor(token.id)?.scrollIntoView({ block: 'nearest' });
 
   // The pretty printed HTML is for reading; copy gives it as rendered
   detailsEl.querySelector('#copy')?.addEventListener('click', (event) => {
@@ -326,16 +444,27 @@ const select = (id: string | null) => {
     });
   });
 };
-const loadPreset = (preset: Preset) => {
+/** Closes the details, and moves focus back to the pill when asked */
+const closeDetails = (refocus = true) => {
+  const pill = selectedId ? pillFor(selectedId) : null;
+
+  detailsEl.hidden = true;
+  document.body.classList.remove('has-details');
+  selectedId = null;
+  highlight(null);
+
+  if (refocus && pill) pill.focus();
+};
+const loadPreset = (value: Preset) => {
   const saved = readSaved(store);
 
   sourceEl.value =
-    preset === 'custom'
+    value === 'custom'
       ? (saved.custom ?? JSON.stringify(PRESETS.showcase, null, 2))
-      : JSON.stringify(PRESETS[preset], null, 2);
-  presetEl.value = preset;
-  writeSaved(store, { preset });
-  parse();
+      : JSON.stringify(PRESETS[value], null, 2);
+  setPreset(value);
+  writeSaved(store, { preset: value });
+  void parse();
   updateSource();
 };
 
@@ -343,81 +472,219 @@ let parseTimer: number | undefined;
 
 sourceEl.addEventListener('input', () => {
   updateSource();
-  presetEl.value = 'custom';
+  setPreset('custom');
   writeSaved(store, { preset: 'custom', custom: sourceEl.value });
   window.clearTimeout(parseTimer);
-  parseTimer = window.setTimeout(parse, 250);
+  parseTimer = window.setTimeout(() => void parse(), 250);
 });
-presetEl.addEventListener('change', () => loadPreset(presetEl.value as Preset));
+presetEls.forEach((input) =>
+  input.addEventListener('change', () => loadPreset(input.value as Preset))
+);
 
-/** Says what happened to a file you loaded, under the editor's heading */
-const showFileStatus = (message: string, refused = false) => {
-  fileStatusEl.replaceChildren(message);
-  fileStatusEl.classList.toggle('is-refused', refused);
-};
-/** Puts a loaded file in the editor, then validates and saves it */
-const useFile = (file: File, text: string) => {
-  window.clearTimeout(parseTimer);
-  sourceEl.value = text;
-  sourceEl.scrollTop = 0;
-  presetEl.value = 'custom';
-
-  const saved = writeSaved(store, { preset: 'custom', custom: text });
-
-  updateSource();
-  parse();
-  showFileStatus(
-    saved
-      ? `Loaded "${file.name}" (${formatBytes(file.size)}).`
-      : `Loaded "${file.name}", but your browser could not save it: it will be gone when you leave.`,
-    !saved
-  );
-};
-/** Asks, in the status line, before a file replaces edits of your own */
-const askToReplace = (file: File, text: string) => {
-  const replace = document.createElement('button');
-  const keep = document.createElement('button');
-
-  replace.type = keep.type = 'button';
-  replace.className = keep.className = 'demo-link';
-  replace.textContent = 'Replace them';
-  keep.textContent = 'Keep my edits';
-  replace.addEventListener('click', () => {
-    useFile(file, text);
-    sourceEl.focus();
-  });
-  keep.addEventListener('click', () => {
-    showFileStatus(`Kept your edits. "${file.name}" was not loaded.`);
-    loadFileEl.focus();
-  });
-  fileStatusEl.classList.remove('is-refused');
-  fileStatusEl.replaceChildren(
-    `"${file.name}" would replace your edits. `,
-    replace,
-    ' ',
-    keep
-  );
-  replace.focus();
-};
 /**
- * Loads a token file from your computer into the editor: read in the browser,
- * then validated and saved like text you type. Asks first when it would
- * replace edits of your own.
+ * Says what happened to a file, or how far loading it has come, under the
+ * drop zone. `steps` lists the steps of loading, each done, current or to do.
+ */
+const showFileStatus = (
+  message: string,
+  {
+    refused = false,
+    steps,
+    progress,
+    cancel
+  }: {
+    refused?: boolean;
+    steps?: [string, 'done' | 'current' | 'todo'][];
+    progress?: { value: number; max: number };
+    cancel?: () => void;
+  } = {}
+) => {
+  const parts: (Node | string)[] = [];
+  const text = document.createElement('p');
+
+  text.textContent = message;
+  parts.push(text);
+
+  if (progress) {
+    const bar = document.createElement('progress');
+
+    bar.max = progress.max;
+    bar.value = progress.value;
+    bar.setAttribute('aria-label', message);
+    parts.push(bar);
+  }
+
+  if (steps) {
+    const list = document.createElement('ol');
+
+    list.className = 'demo-steps';
+    list.append(
+      ...steps.map(([label, state]) => {
+        const item = document.createElement('li');
+
+        item.className = `is-${state}`;
+        item.textContent = label;
+
+        if (state === 'current') item.setAttribute('aria-current', 'step');
+
+        return item;
+      })
+    );
+    parts.push(list);
+  }
+
+  if (cancel) {
+    const button = document.createElement('button');
+
+    button.type = 'button';
+    button.className = 'demo-button';
+    button.textContent = 'Cancel';
+    button.addEventListener('click', cancel);
+    parts.push(button);
+  }
+
+  fileStatusEl.replaceChildren(...parts);
+  fileStatusEl.classList.toggle('is-refused', refused);
+  fileStatusEl.classList.toggle('is-busy', Boolean(steps));
+};
+const STEPS = ['Read the file', 'Check the tokens', 'Save in this browser'];
+const steps = (current: number): [string, 'done' | 'current' | 'todo'][] =>
+  STEPS.map((label, index) => [
+    label,
+    index < current ? 'done' : index === current ? 'current' : 'todo'
+  ]);
+/** Reads a file as text, reporting progress; resolves null when cancelled */
+const readFile = (file: File): Promise<string | null> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    const label = `Reading "${file.name}" (${formatBytes(file.size)})`;
+
+    reader.addEventListener('progress', (event) =>
+      showFileStatus(label, {
+        steps: steps(0),
+        progress: { value: event.loaded, max: event.total || file.size },
+        cancel: () => reader.abort()
+      })
+    );
+    reader.addEventListener('load', () => resolve(reader.result as string));
+    reader.addEventListener('abort', () => resolve(null));
+    reader.addEventListener('error', () => reject(reader.error));
+    showFileStatus(label, {
+      steps: steps(0),
+      progress: { value: 0, max: file.size },
+      cancel: () => reader.abort()
+    });
+    reader.readAsText(file);
+  });
+/** Asks in a modal dialog whether a file may replace your edits (#108) */
+const askToReplace = async (
+  file: File,
+  checked: CheckedTokens
+): Promise<boolean> => {
+  // Your edits as they are now, not as last shown: a check may be pending
+  const yours = await check(sourceEl.value);
+  const set = (selector: string, text: string) =>
+    ((replaceEl.querySelector(selector) as HTMLElement).textContent = text);
+  const problemsText = (count: number) =>
+    count ? plural(count, 'problem') : 'No problems';
+
+  set('#replace-yours-count', plural(yours.tokens.length, 'token'));
+  set('#replace-yours-problems', problemsText(yours.problems.length));
+  set('#replace-file-name', file.name);
+  set('#replace-file-count', plural(checked.tokens.length, 'token'));
+  set('#replace-file-problems', problemsText(checked.problems.length));
+  replaceEl
+    .querySelector('#replace-yours-problems')
+    ?.classList.toggle('is-bad', yours.problems.length > 0);
+  replaceEl
+    .querySelector('#replace-file-problems')
+    ?.classList.toggle('is-bad', checked.problems.length > 0);
+  replaceEl.returnValue = '';
+  replaceEl.showModal();
+
+  return new Promise((resolve) =>
+    replaceEl.addEventListener(
+      'close',
+      () => resolve(replaceEl.returnValue === 'replace'),
+      { once: true }
+    )
+  );
+};
+
+// A click on the backdrop keeps your edits, like Esc
+replaceEl.addEventListener('click', (event) => {
+  if (event.target === replaceEl) replaceEl.close('keep');
+});
+
+let loading = false;
+
+/**
+ * Loads a token file from your computer into the editor (#102, #108, #109):
+ * read in the browser with progress, checked in the worker, then, after
+ * asking when it would replace edits of your own, shown and saved.
  */
 const loadFile = async (file: File) => {
+  if (loading) return;
+
   const tooLarge = refuseTokenFile(file);
 
-  if (tooLarge) return showFileStatus(tooLarge, true);
+  if (tooLarge) return showFileStatus(tooLarge, { refused: true });
 
-  const text = await file.text();
-  const refused = refuseTokenFile(file, text);
+  loading = true;
 
-  if (refused) return showFileStatus(refused, true);
+  try {
+    const text = await readFile(file);
 
-  if (presetEl.value === 'custom' && sourceEl.value !== text)
-    return askToReplace(file, text);
+    if (text === null)
+      return showFileStatus(`Cancelled: "${file.name}" was not loaded.`);
 
-  useFile(file, text);
+    const refused = refuseTokenFile(file, text);
+
+    if (refused) return showFileStatus(refused, { refused: true });
+
+    showFileStatus(
+      `Checking ${plural(countTokens(text), 'token')} in "${file.name}"`,
+      { steps: steps(1) }
+    );
+
+    const checked = await check(text);
+
+    if (preset() === 'custom' && sourceEl.value !== text) {
+      const replace = await askToReplace(file, checked);
+
+      if (!replace) {
+        showFileStatus(`Kept your edits. "${file.name}" was not loaded.`);
+        loadFileEl.focus();
+
+        return;
+      }
+    }
+
+    window.clearTimeout(parseTimer);
+    lastParse += 1;
+    showChecking(null);
+    sourceEl.value = text;
+    sourceEl.scrollTop = 0;
+    setPreset('custom');
+
+    const saved = writeSaved(store, { preset: 'custom', custom: text });
+
+    updateSource();
+    apply(checked, text);
+
+    const summary = `${plural(checked.tokens.length, 'token')}${checked.problems.length ? `, ${plural(checked.problems.length, 'problem')}` : ''}`;
+
+    showFileStatus(
+      saved
+        ? `Loaded "${file.name}" (${formatBytes(file.size)}): ${summary}.`
+        : `Loaded "${file.name}", but your browser could not save it: it will be gone when you leave.`,
+      { refused: !saved }
+    );
+  } catch {
+    showFileStatus(`"${file.name}" could not be read.`, { refused: true });
+  } finally {
+    loading = false;
+  }
 };
 
 loadFileEl.addEventListener('click', () => fileEl.click());
@@ -430,21 +697,25 @@ fileEl.addEventListener('change', () => {
   if (file) void loadFile(file);
 });
 
-// Dropping a file on the editor; dropped text is left to the textarea
+// A file dropped anywhere on the playground loads it; dropped text is left
+// to the textarea
 const hasFiles = (event: DragEvent) =>
   event.dataTransfer?.types.includes('Files') ?? false;
+const mainEl = $<HTMLElement>('.demo-main');
 
-sourceBoxEl.addEventListener('dragover', (event) => {
+mainEl.addEventListener('dragover', (event) => {
   if (!hasFiles(event)) return;
 
   event.preventDefault();
-  sourceBoxEl.classList.add('is-dropping');
+  dropEl.classList.add('is-dropping');
 });
-sourceBoxEl.addEventListener('dragleave', () =>
-  sourceBoxEl.classList.remove('is-dropping')
-);
-sourceBoxEl.addEventListener('drop', (event) => {
-  sourceBoxEl.classList.remove('is-dropping');
+mainEl.addEventListener('dragleave', (event) => {
+  // Only when the pointer leaves the playground, not one of its children
+  if (!mainEl.contains(event.relatedTarget as Node | null))
+    dropEl.classList.remove('is-dropping');
+});
+mainEl.addEventListener('drop', (event) => {
+  dropEl.classList.remove('is-dropping');
 
   if (!hasFiles(event)) return;
 
@@ -460,22 +731,9 @@ prefixEl.addEventListener('input', () => {
 });
 filterEl.addEventListener('input', render);
 
-// One column (as in playground.css): the details are below every pill, so a
-// selection moves there, and "Back to the pill" returns
+// One column (as in playground.css): the details cover the page, so a
+// selection moves focus into them, and closing them moves it back
 const oneColumn = matchMedia('(max-width: 1100px)');
-const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-/** Moves focus to `element` and scrolls `area` (or it) into view */
-const reveal = (
-  element: HTMLElement,
-  block: 'start' | 'center',
-  area: HTMLElement = element
-) => {
-  element.focus({ preventScroll: true });
-  area.scrollIntoView({
-    block,
-    behavior: reducedMotion.matches ? 'auto' : 'smooth'
-  });
-};
 const selectFromEvent = (event: Event) => {
   const target = (event.target as HTMLElement).closest<HTMLElement>(
     '[data-demo-id], [data-select]'
@@ -488,7 +746,7 @@ const selectFromEvent = (event: Event) => {
   const heading = detailsEl.querySelector<HTMLElement>('h2');
 
   if (oneColumn.matches && selectedId && heading)
-    reveal(heading, 'start', detailsEl);
+    heading.focus({ preventScroll: true });
 };
 
 groupsEl.addEventListener('click', selectFromEvent);
@@ -498,16 +756,16 @@ groupsEl.addEventListener('keydown', (event) => {
     selectFromEvent(event);
   }
 });
-detailsEl.addEventListener('click', selectFromEvent);
 detailsEl.addEventListener('click', (event) => {
-  if (!(event.target as HTMLElement).closest('[data-back]') || !selectedId)
-    return;
+  if ((event.target as HTMLElement).closest('[data-close]'))
+    return closeDetails();
 
-  const pill = listEl.querySelector<HTMLElement>(
-    `[data-demo-id="${CSS.escape(selectedId)}"]`
-  );
-
-  if (pill) reveal(pill, 'center');
+  selectFromEvent(event);
+});
+// Esc closes the details, unless a dialog takes it
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !detailsEl.hidden && !replaceEl.open)
+    closeDetails();
 });
 
 let hoveredId: string | null = null;
@@ -529,6 +787,10 @@ groupsEl.addEventListener('mouseleave', () => {
 });
 
 mountHeader();
+bundledCountEl.textContent = plural(
+  countTokens(JSON.stringify(bundledTokens)),
+  'token'
+);
 loadPreset(readSaved(store).preset ?? 'showcase');
 
 // Shiki loads after the page, in its own chunk; the page works without it

@@ -28,6 +28,31 @@ const STATES: {
       await page.locator('[data-demo-id="shadow-raised"]').click();
       await expect(page.locator('#details pre.shiki').first()).toBeVisible();
     }
+  },
+  {
+    name: 'playground with problems and the replace dialog open',
+    path: 'playground',
+    prepare: async (page) => {
+      await page
+        .locator('#source')
+        .fill('{ "color": { "$type": "color", "a": { "$value": "{nope}" } } }');
+      await expect(page.locator('#error li')).toHaveCount(1);
+      await page.locator('#file').setInputFiles({
+        name: 'colors.tokens.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from('{}')
+      });
+      await expect(page.getByRole('dialog')).toBeVisible();
+    }
+  },
+  {
+    name: 'flow with the sidebar open on a phone',
+    path: '',
+    prepare: async (page) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.getByRole('button', { name: 'About this flow' }).click();
+      await expect(page.locator('#tokens-showing li').first()).toBeVisible();
+    }
   }
 ];
 

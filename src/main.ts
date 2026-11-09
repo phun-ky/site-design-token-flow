@@ -29,7 +29,7 @@ const columnLabel = (depth: number): string =>
 
 /** The flow view: lays the tokens out and draws the lines between them */
 interface DTFInstance {
-  _raw_tokens: DTCGDocument;
+  _flat_tokens: FlatDesignToken[];
   _tokens: DesignToken[];
   _container_el: HTMLElement;
   _arclace: Arclace;
@@ -44,12 +44,13 @@ interface DTFInstance {
   _create_loose(lanes: LooseLane[]): HTMLElement;
 }
 
-const DTF = function (this: DTFInstance, raw_tokens: DTCGDocument) {
-  this._raw_tokens = raw_tokens;
+// Takes tokens already checked, so a large file isn't checked twice
+const DTF = function (this: DTFInstance, flat_tokens: FlatDesignToken[]) {
+  this._flat_tokens = flat_tokens;
   this._tokens = <DesignToken[]>[];
   this._init();
 } as unknown as {
-  new (raw_tokens: DTCGDocument): DTFInstance;
+  new (flat_tokens: FlatDesignToken[]): DTFInstance;
   prototype: DTFInstance;
 };
 
@@ -183,11 +184,7 @@ DTF.prototype._create_loose = function (
 };
 
 DTF.prototype._setup_tokens = function (this: DTFInstance) {
-  if (!this._raw_tokens) return;
-
-  const { columnCount, flow, loose } = layoutTokens(
-    flattenTokens(this._raw_tokens)
-  );
+  const { columnCount, flow, loose } = layoutTokens(this._flat_tokens);
 
   if (flow.length)
     this._container_el.appendChild(this._create_flow(flow, columnCount));
@@ -302,44 +299,92 @@ const flowTokens = chooseFlowTokens(
   browserStorage(),
   new URLSearchParams(window.location.search).get('tokens') === 'example'
 );
-const doc =
-  flowTokens.kind === 'yours'
-    ? flowTokens.doc
-    : (exampleTokens as DTCGDocument);
-const sourceEl = document.querySelector<HTMLElement>('#tokens-source');
+const example = flattenTokens(exampleTokens as DTCGDocument);
+const tokens = flowTokens.kind === 'yours' ? flowTokens.tokens : example;
+const lines = tokens.reduce((sum, token) => sum + token.ancestors.length, 0);
+const plural = (count: number, word: string) =>
+  `${count} ${word}${count === 1 ? '' : 's'}`;
+/** The sidebar: which tokens are shown, why, and where to change them */
+const showSource = () => {
+  const { options, note, links } = describeFlowSource(
+    flowTokens,
+    example.length
+  );
+  const showingEl = document.querySelector('#tokens-showing');
+  const sourceEl = document.querySelector<HTMLElement>('#tokens-source');
 
-if (sourceEl) {
-  const { text, links } = describeFlowSource(flowTokens);
+  showingEl?.replaceChildren(
+    ...options.map(({ label, detail, href, current }) => {
+      const item = document.createElement('li');
+      // The tokens shown aren't a link to themselves
+      const option = document.createElement(current ? 'span' : 'a');
+      const small = document.createElement('small');
 
-  sourceEl.replaceChildren(
-    text,
-    ...links.flatMap(({ label, href }) => {
-      const link = document.createElement('a');
+      if (current) option.setAttribute('aria-current', 'true');
+      else (option as HTMLAnchorElement).href = href;
 
-      link.href = href;
-      link.textContent = label;
+      small.textContent = detail;
+      option.append(label, small);
+      item.append(option);
 
-      return [' ', link];
+      return item;
     })
   );
-  sourceEl.hidden = false;
-}
 
-new DTF(doc);
-// The fonts the font tokens describe; each downloads when a pill first shows it
-loadFonts(
-  getFontFaces(
-    flowTokens.kind === 'yours' ? flowTokens.tokens : flattenTokens(doc)
-  )
+  if (!sourceEl) return;
+
+  const parts: Node[] = links.map(({ label, href }) => {
+    const link = document.createElement('a');
+
+    link.href = href;
+    link.textContent = label;
+
+    return link;
+  });
+
+  if (note) parts.unshift(document.createTextNode(note));
+
+  sourceEl.replaceChildren(...parts);
+  sourceEl.hidden = parts.length === 0;
+};
+// On a phone the sidebar folds into a bar; its button opens it
+const sidebarEl = document.querySelector<HTMLElement>('#flow-sidebar');
+const toggleEl = document.querySelector<HTMLButtonElement>(
+  '.app-sidebar-toggle'
 );
 
-// The canvas: the wheel and dragging pan, Ctrl or Cmd and the wheel zoom. On a
-// phone it opens on the first token of the inheritance flow, at a readable scale
-mountZoomControls((onChange) =>
-  createZoom(
-    document.querySelector('.app-viewport') as HTMLElement,
-    document.querySelector('.app-canvas') as HTMLElement,
-    onChange,
-    () => document.querySelector('.flow .flow-column .design-token')
-  )
+toggleEl?.addEventListener('click', () => {
+  const open = sidebarEl?.classList.toggle('is-open') ?? false;
+
+  toggleEl.setAttribute('aria-expanded', String(open));
+});
+showSource();
+
+// Says what is being drawn before drawing it: a large flow takes a while,
+// and the status shows when it takes more than 300 ms (#109)
+const statusEl = document.querySelector<HTMLElement>('#flow-status');
+
+if (statusEl)
+  statusEl.textContent = `Drawing ${plural(tokens.length, 'token')} and ${plural(lines, 'line')}`;
+
+// Two frames: the status is painted before the drawing blocks the page
+requestAnimationFrame(() =>
+  requestAnimationFrame(() => {
+    new DTF(tokens);
+    // The fonts the font tokens describe; each downloads when a pill first shows it
+    loadFonts(getFontFaces(tokens));
+
+    // The canvas: the wheel and dragging pan, Ctrl or Cmd and the wheel zoom. On a
+    // phone it opens on the first token of the inheritance flow, at a readable scale
+    mountZoomControls((onChange) =>
+      createZoom(
+        document.querySelector('.app-viewport') as HTMLElement,
+        document.querySelector('.app-canvas') as HTMLElement,
+        onChange,
+        () => document.querySelector('.flow .flow-column .design-token')
+      )
+    );
+
+    if (statusEl) statusEl.textContent = '';
+  })
 );

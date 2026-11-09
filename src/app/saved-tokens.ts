@@ -142,6 +142,8 @@ export interface YourTokens {
 export interface ExampleTokens {
   kind: 'example';
   reason: 'chosen' | 'none' | 'problems' | 'blocked';
+  /** When you chose the example: how many tokens you have */
+  yours?: number;
 }
 
 export type FlowTokens = YourTokens | ExampleTokens;
@@ -175,7 +177,8 @@ export const chooseFlowTokens = (
       reason: latest.status === 'problems' ? 'problems' : 'none'
     };
 
-  if (example) return { kind: 'example', reason: 'chosen' };
+  if (example)
+    return { kind: 'example', reason: 'chosen', yours: found.tokens.length };
 
   return {
     kind: 'yours',

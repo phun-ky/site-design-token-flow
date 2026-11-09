@@ -82,7 +82,7 @@ test('loads a chosen file in steps, checks it in a worker, saves it, and sends n
     'Loaded "colors.tokens.json" (1 kB): 2 tokens.'
   );
   await expect(page.locator(pills)).toHaveCount(2);
-  await expect(page.getByLabel('Your tokens')).toBeChecked();
+  await expect(page.getByRole('radio', { name: /^Your tokens/ })).toBeChecked();
   await expect(page.locator('#to-flow')).toBeVisible();
   // Nothing was sent, and the worker was already running for the editor
   expect(requests, 'requests while loading a file').toEqual([]);
@@ -198,52 +198,62 @@ test('validates a loaded file like typed text', async ({ page }) => {
   await expect(page.locator(pills)).toHaveCount(0);
 });
 
-test('asks in a modal dialog before a file replaces your edits', async ({
+test('asks in the import wizard before a file replaces your tokens, or adds to them', async ({
   page
 }) => {
-  const edits = JSON.stringify({ size: { $type: 'dimension' } });
-  const dialog = page.getByRole('dialog', {
-    name: 'Replace your edits with this file?'
-  });
+  const edits = JSON.stringify(
+    {
+      color: {
+        $type: 'color',
+        red: { $value: { colorSpace: 'srgb', components: [1, 0, 0] } }
+      }
+    },
+    null,
+    2
+  );
+  const wizard = page.getByRole('dialog', { name: /^Import/ });
 
   await page.locator('#source').fill(edits);
-  await expect(page.getByLabel('Your tokens')).toBeChecked();
+  await expect(page.getByRole('radio', { name: /^Your tokens/ })).toBeChecked();
+  await expect(page.locator(pills)).toHaveCount(1);
   await page.locator('#file').setInputFiles(FILE);
 
-  await expect(dialog).toBeVisible();
-  // Both sides, counted before asking
-  await expect(dialog).toContainText(/Your edits\s*0 tokens\s*No problems/);
-  await expect(dialog).toContainText(
-    /colors\.tokens\.json\s*2 tokens\s*No problems/
-  );
-  await expect(
-    page.getByRole('button', { name: 'Keep my edits' })
-  ).toBeFocused();
+  await expect(wizard).toBeVisible();
+  await expect(wizard).toContainText('A DTCG file with 2 tokens.');
   // Modal: the page behind can't be used
   expect(
     await page.evaluate(() =>
-      (document.querySelector('#replace') as HTMLDialogElement).matches(
-        ':modal'
-      )
+      (document.querySelector('#import') as HTMLDialogElement).matches(':modal')
     )
   ).toBe(true);
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(
+    page.getByRole('radio', { name: /^Add to your tokens/ })
+  ).toBeChecked();
+  await expect(wizard).toContainText('Adds 2 tokens to your 1');
 
-  await page.getByRole('button', { name: 'Keep my edits' }).click();
-  await expect(dialog).toBeHidden();
+  // Esc keeps your tokens
+  await page.keyboard.press('Escape');
+  await expect(wizard).toBeHidden();
   await expect(page.locator(status)).toHaveText(
-    'Kept your edits. "colors.tokens.json" was not loaded.'
+    'Kept your tokens. "colors.tokens.json" was not loaded.'
   );
   await expect(page.locator('#source')).toHaveValue(edits);
 
-  // Esc keeps them too
+  // Add: your red stays, the file's tokens join it
   await page.locator('#file').setInputFiles(FILE);
-  await expect(dialog).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(dialog).toBeHidden();
-  await expect(page.locator('#source')).toHaveValue(edits);
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.getByRole('button', { name: 'Add 2 tokens' }).click();
+  await expect(page.locator(pills)).toHaveCount(3);
+  await expect(page.locator(status)).toContainText(
+    'Added 2 tokens from "colors.tokens.json"'
+  );
 
+  // Replace: only the file's tokens, as the file has them
   await page.locator('#file').setInputFiles(FILE);
-  await page.getByRole('button', { name: 'Replace with the file' }).click();
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.getByRole('radio', { name: /^Replace your tokens/ }).check();
+  await page.getByRole('button', { name: 'Load 2 tokens' }).click();
   await expect(page.locator('#source')).toHaveValue(FILE.buffer.toString());
   await expect(page.locator(pills)).toHaveCount(2);
 });

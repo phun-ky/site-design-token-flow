@@ -10,6 +10,7 @@ import {
   type CheckedProblem,
   type CheckedTokens
 } from '../src/app/check-tokens';
+import type { ConvertedTokens } from '../src/app/convert-tokens';
 import { loadFonts } from '../src/app/fonts';
 import { formatHtml } from '../src/app/format-html';
 import { mountHeader } from '../src/app/header';
@@ -30,9 +31,13 @@ import {
   getDesignTokenKind,
   getFontFaces,
   toCssValue,
-  renderDesignToken
+  renderDesignToken,
+  type DTCGDocument
 } from '../src/tokens';
+import type { SetUse } from '../src/tokens/tokens-studio';
 
+import { runImportWizard } from './import-wizard';
+import { mountNewTokenForm } from './new-token-form';
 import showcaseTokens from './showcase.tokens.json';
 import type { CheckRequest, CheckResponse } from './validate-worker';
 
@@ -63,7 +68,9 @@ const dropEl = $<HTMLElement>('#drop');
 const loadFileEl = $<HTMLButtonElement>('#load-file');
 const fileEl = $<HTMLInputElement>('#file');
 const fileStatusEl = $<HTMLDivElement>('#file-status');
-const replaceEl = $<HTMLDialogElement>('#replace');
+const importEl = $<HTMLDialogElement>('#import');
+const exportEl = $<HTMLDialogElement>('#export');
+const announceEl = $<HTMLParagraphElement>('#announce');
 const groupsEl = $<HTMLDivElement>('#groups');
 const countEl = $<HTMLSpanElement>('#count');
 const detailsEl = $<HTMLElement>('#details');
@@ -155,7 +162,7 @@ const worker = (() => {
     return null;
   }
 })();
-const waiting = new Map<number, (checked: CheckedTokens) => void>();
+const waiting = new Map<number, (response: CheckResponse) => void>();
 
 let lastRequest = 0;
 
@@ -164,16 +171,45 @@ worker?.addEventListener('message', (event: MessageEvent<CheckResponse>) => {
   waiting.delete(event.data.id);
 });
 
-/** Checks token JSON, in the worker when there is one */
-const check = (text: string): Promise<CheckedTokens> => {
-  if (!worker) return Promise.resolve(checkTokenText(text));
-
-  const id = (lastRequest += 1);
-
-  return new Promise((resolve) => {
-    waiting.set(id, resolve);
-    worker.postMessage({ id, text } satisfies CheckRequest);
+/** Sends a request to the worker */
+const ask = (request: CheckRequest): Promise<CheckResponse> =>
+  new Promise((resolve) => {
+    waiting.set(request.id, resolve);
+    worker?.postMessage(request);
   });
+/** Checks token JSON, in the worker when there is one */
+const check = async (text: string): Promise<CheckedTokens> => {
+  if (!worker) return checkTokenText(text);
+
+  const response = await ask({ id: (lastRequest += 1), kind: 'check', text });
+
+  return response as CheckedTokens;
+};
+/** Reads a token file, converting a Tokens Studio file, in the worker */
+const convert = async (
+  text: string,
+  choice: { theme?: string; uses?: Record<string, SetUse> } = {}
+): Promise<ConvertedTokens | null> => {
+  // Without a worker, the converter loads here, when first needed
+  if (!worker)
+    return (await import('../src/app/convert-tokens')).convertTokenText(
+      text,
+      choice
+    );
+
+  const response = await ask({
+    id: (lastRequest += 1),
+    kind: 'convert',
+    text,
+    ...choice
+  });
+
+  return response.kind === 'convert' ? response.converted : null;
+};
+/** Says something to screen readers, and anyone reading the status */
+const announce = (message: string) => {
+  announceEl.textContent = '';
+  requestAnimationFrame(() => (announceEl.textContent = message));
 };
 /**
  * Shows that the tokens are being checked. It appears only when checking
@@ -432,6 +468,9 @@ const select = (id: string | null) => {
     <h3><code>renderDesignToken()</code> <button type="button" class="demo-link" id="copy">copy</button></h3>
     ${codeBlock(formatHtml(html), 'html', 'demo-html')}
   `;
+
+  if (newToken.isOpen()) newToken.close(false);
+
   detailsEl.hidden = false;
   document.body.classList.add('has-details');
   // The details narrow the pills, which can move the selected one out of view
@@ -449,7 +488,7 @@ const closeDetails = (refocus = true) => {
   const pill = selectedId ? pillFor(selectedId) : null;
 
   detailsEl.hidden = true;
-  document.body.classList.remove('has-details');
+  document.body.classList.toggle('has-details', newToken.isOpen());
   selectedId = null;
   highlight(null);
 
@@ -576,52 +615,41 @@ const readFile = (file: File): Promise<string | null> =>
     });
     reader.readAsText(file);
   });
-/** Asks in a modal dialog whether a file may replace your edits (#108) */
-const askToReplace = async (
-  file: File,
-  checked: CheckedTokens
-): Promise<boolean> => {
-  // Your edits as they are now, not as last shown: a check may be pending
-  const yours = await check(sourceEl.value);
-  const set = (selector: string, text: string) =>
-    ((replaceEl.querySelector(selector) as HTMLElement).textContent = text);
-  const problemsText = (count: number) =>
-    count ? plural(count, 'problem') : 'No problems';
-
-  set('#replace-yours-count', plural(yours.tokens.length, 'token'));
-  set('#replace-yours-problems', problemsText(yours.problems.length));
-  set('#replace-file-name', file.name);
-  set('#replace-file-count', plural(checked.tokens.length, 'token'));
-  set('#replace-file-problems', problemsText(checked.problems.length));
-  replaceEl
-    .querySelector('#replace-yours-problems')
-    ?.classList.toggle('is-bad', yours.problems.length > 0);
-  replaceEl
-    .querySelector('#replace-file-problems')
-    ?.classList.toggle('is-bad', checked.problems.length > 0);
-  replaceEl.returnValue = '';
-  replaceEl.showModal();
-
-  return new Promise((resolve) =>
-    replaceEl.addEventListener(
-      'close',
-      () => resolve(replaceEl.returnValue === 'replace'),
-      { once: true }
-    )
-  );
-};
-
-// A click on the backdrop keeps your edits, like Esc
-replaceEl.addEventListener('click', (event) => {
-  if (event.target === replaceEl) replaceEl.close('keep');
-});
 
 let loading = false;
 
+/** Your tokens, when you have some: to add a file to, or replace */
+const yourTokens = () => {
+  if (preset() !== 'custom' || !sourceEl.value.trim()) return null;
+
+  try {
+    return {
+      document: JSON.parse(sourceEl.value) as DTCGDocument,
+      count: tokens.length
+    };
+  } catch {
+    return { document: null, count: tokens.length };
+  }
+};
+/** Puts a document in the editor as your tokens, checked and saved */
+const useDocument = async (text: string) => {
+  window.clearTimeout(parseTimer);
+  sourceEl.value = text;
+  sourceEl.scrollTop = 0;
+  setPreset('custom');
+
+  const saved = writeSaved(store, { preset: 'custom', custom: text });
+
+  updateSource();
+  await parse();
+
+  return saved;
+};
 /**
- * Loads a token file from your computer into the editor (#102, #108, #109):
- * read in the browser with progress, checked in the worker, then, after
- * asking when it would replace edits of your own, shown and saved.
+ * Loads a token file from your computer (#102, #109, #114, #117): read in
+ * the browser with progress, then read in the worker. A Tokens Studio file
+ * goes through the import wizard, to choose its theme or sets; any file goes
+ * through it when you have tokens, to add to them or replace them.
  */
 const loadFile = async (file: File) => {
   if (loading) return;
@@ -647,37 +675,77 @@ const loadFile = async (file: File) => {
       { steps: steps(1) }
     );
 
-    const checked = await check(text);
+    const converted = await convert(text);
+    const yours = yourTokens();
+    const studio = converted?.summary.format === 'tokens-studio';
 
-    if (preset() === 'custom' && sourceEl.value !== text) {
-      const replace = await askToReplace(file, checked);
+    let loadText = text;
+    let message = '';
 
-      if (!replace) {
-        showFileStatus(`Kept your edits. "${file.name}" was not loaded.`);
+    if (converted && (studio || yours)) {
+      const result = await runImportWizard({
+        fileName: file.name,
+        first: converted,
+        convert: (choice) => convert(text, choice),
+        check,
+        yours
+      });
+
+      if (!result) {
+        showFileStatus(`Kept your tokens. "${file.name}" was not loaded.`);
         loadFileEl.focus();
+
+        return;
+      }
+
+      // A DTCG file replacing yours keeps its own formatting
+      loadText =
+        result.mode === 'replace' && !studio
+          ? text
+          : JSON.stringify(result.document, null, 2);
+      message =
+        result.mode === 'add'
+          ? `Added ${plural(result.count, 'token')} from "${file.name}"${result.overwritten ? `, overwriting ${result.overwritten}` : ''}`
+          : `Loaded ${plural(result.count, 'token')} from "${file.name}"${studio ? ', converted from Tokens Studio' : ''}`;
+    } else if (!converted && yours) {
+      // Not JSON: it can only replace your tokens, so ask first
+      const result = await runImportWizard({
+        fileName: file.name,
+        first: {
+          summary: {
+            format: 'dtcg',
+            sets: [{ name: 'tokens', count: 0 }],
+            themes: []
+          },
+          uses: {},
+          conversion: { document: {} as DTCGDocument, converted: 0, notes: [] },
+          checked: { tokens: [], problems: [], json: false }
+        },
+        convert: async () => null,
+        check,
+        yours: { document: null, count: yours.count }
+      });
+
+      if (!result) {
+        showFileStatus(`Kept your tokens. "${file.name}" was not loaded.`);
 
         return;
       }
     }
 
-    window.clearTimeout(parseTimer);
-    lastParse += 1;
-    showChecking(null);
-    sourceEl.value = text;
-    sourceEl.scrollTop = 0;
-    setPreset('custom');
+    showFileStatus(`Saving "${file.name}" in this browser`, {
+      steps: steps(2)
+    });
 
-    const saved = writeSaved(store, { preset: 'custom', custom: text });
-
-    updateSource();
-    apply(checked, text);
-
-    const summary = `${plural(checked.tokens.length, 'token')}${checked.problems.length ? `, ${plural(checked.problems.length, 'problem')}` : ''}`;
+    const saved = await useDocument(loadText);
+    const summary = `${plural(tokens.length, 'token')}${problems.length ? `, ${plural(problems.length, 'problem')}` : ''}`;
 
     showFileStatus(
-      saved
-        ? `Loaded "${file.name}" (${formatBytes(file.size)}): ${summary}.`
-        : `Loaded "${file.name}", but your browser could not save it: it will be gone when you leave.`,
+      !saved
+        ? `Loaded "${file.name}", but your browser could not save it: it will be gone when you leave.`
+        : message
+          ? `${message}: ${summary} now.`
+          : `Loaded "${file.name}" (${formatBytes(file.size)}): ${summary}.`,
       { refused: !saved }
     );
   } catch {
@@ -686,6 +754,91 @@ const loadFile = async (file: File) => {
     loading = false;
   }
 };
+
+// The wizard's backdrop keeps your tokens, like Esc and Cancel
+importEl.addEventListener('click', (event) => {
+  if (event.target === importEl) importEl.close('cancel');
+});
+exportEl.addEventListener('click', (event) => {
+  if (event.target === exportEl) exportEl.close('close');
+});
+
+// Export: your tokens, or while your edits have problems, the last version
+// without (#115)
+$<HTMLButtonElement>('#export-open').addEventListener('click', async () => {
+  // The export, and the converter it uses, load when first needed
+  const { openExportDialog } = await import('./export-dialog');
+
+  if (problems.length === 0 && tokens.length > 0) {
+    try {
+      return openExportDialog(
+        {
+          document: JSON.parse(sourceEl.value) as DTCGDocument,
+          tokens,
+          earlier: false
+        },
+        announce
+      );
+    } catch {
+      // Not JSON: falls through to the last valid version
+    }
+  }
+
+  const valid = readSaved(store).valid;
+
+  if (preset() === 'custom' && valid) {
+    const checked = checkTokenText(valid);
+
+    return openExportDialog(
+      {
+        document: JSON.parse(valid) as DTCGDocument,
+        tokens: checked.tokens,
+        earlier: true
+      },
+      announce
+    );
+  }
+
+  announce('There are no tokens to export yet: fix the problems first');
+});
+
+// The new token form (#116), in the details column
+const newToken = mountNewTokenForm({
+  tokens: () => tokens,
+  document: () => {
+    try {
+      return JSON.parse(sourceEl.value) as DTCGDocument;
+    } catch {
+      return null;
+    }
+  },
+  prefix: () => prefixEl.value,
+  add: async (document, name) => {
+    await useDocument(JSON.stringify(document, null, 2));
+
+    const added = tokens.find((token) => token.name === name);
+
+    if (added) {
+      select(added.id);
+      pillFor(added.id)?.focus();
+    }
+
+    announce(`Added ${name}`);
+  },
+  toggle: (open) => {
+    if (open && !detailsEl.hidden) {
+      detailsEl.hidden = true;
+      selectedId = null;
+      highlight(null);
+    }
+
+    document.body.classList.toggle('has-details', open || !detailsEl.hidden);
+  }
+});
+
+$<HTMLButtonElement>('#new-token-open').addEventListener('click', () =>
+  newToken.open()
+);
 
 loadFileEl.addEventListener('click', () => fileEl.click());
 fileEl.addEventListener('change', () => {
@@ -764,8 +917,10 @@ detailsEl.addEventListener('click', (event) => {
 });
 // Esc closes the details, unless a dialog takes it
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !detailsEl.hidden && !replaceEl.open)
-    closeDetails();
+  if (event.key !== 'Escape' || importEl.open || exportEl.open) return;
+
+  if (newToken.isOpen()) newToken.close();
+  else if (!detailsEl.hidden) closeDetails();
 });
 
 let hoveredId: string | null = null;

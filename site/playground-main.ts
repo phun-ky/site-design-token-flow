@@ -14,6 +14,7 @@ import {
   writeSaved,
   type Preset
 } from '../src/app/saved-tokens';
+import { formatBytes, refuseTokenFile } from '../src/app/token-file';
 import bundledTokens from '../src/assets/data/design-tokens.tokens.json';
 import {
   createDesignTokenElement,
@@ -43,6 +44,9 @@ const prefixEl = $<HTMLInputElement>('#prefix');
 const filterEl = $<HTMLInputElement>('#filter');
 const errorEl = $<HTMLDivElement>('#error');
 const flowLinkEl = $<HTMLParagraphElement>('#to-flow');
+const loadFileEl = $<HTMLButtonElement>('#load-file');
+const fileEl = $<HTMLInputElement>('#file');
+const fileStatusEl = $<HTMLParagraphElement>('#file-status');
 const flowHintEl = $<HTMLSpanElement>('#to-flow-hint');
 const groupsEl = $<HTMLDivElement>('#groups');
 const countEl = $<HTMLSpanElement>('#count');
@@ -345,6 +349,111 @@ sourceEl.addEventListener('input', () => {
   parseTimer = window.setTimeout(parse, 250);
 });
 presetEl.addEventListener('change', () => loadPreset(presetEl.value as Preset));
+
+/** Says what happened to a file you loaded, under the editor's heading */
+const showFileStatus = (message: string, refused = false) => {
+  fileStatusEl.replaceChildren(message);
+  fileStatusEl.classList.toggle('is-refused', refused);
+};
+/** Puts a loaded file in the editor, then validates and saves it */
+const useFile = (file: File, text: string) => {
+  window.clearTimeout(parseTimer);
+  sourceEl.value = text;
+  sourceEl.scrollTop = 0;
+  presetEl.value = 'custom';
+
+  const saved = writeSaved(store, { preset: 'custom', custom: text });
+
+  updateSource();
+  parse();
+  showFileStatus(
+    saved
+      ? `Loaded "${file.name}" (${formatBytes(file.size)}).`
+      : `Loaded "${file.name}", but your browser could not save it: it will be gone when you leave.`,
+    !saved
+  );
+};
+/** Asks, in the status line, before a file replaces edits of your own */
+const askToReplace = (file: File, text: string) => {
+  const replace = document.createElement('button');
+  const keep = document.createElement('button');
+
+  replace.type = keep.type = 'button';
+  replace.className = keep.className = 'demo-link';
+  replace.textContent = 'Replace them';
+  keep.textContent = 'Keep my edits';
+  replace.addEventListener('click', () => {
+    useFile(file, text);
+    sourceEl.focus();
+  });
+  keep.addEventListener('click', () => {
+    showFileStatus(`Kept your edits. "${file.name}" was not loaded.`);
+    loadFileEl.focus();
+  });
+  fileStatusEl.classList.remove('is-refused');
+  fileStatusEl.replaceChildren(
+    `"${file.name}" would replace your edits. `,
+    replace,
+    ' ',
+    keep
+  );
+  replace.focus();
+};
+/**
+ * Loads a token file from your computer into the editor: read in the browser,
+ * then validated and saved like text you type. Asks first when it would
+ * replace edits of your own.
+ */
+const loadFile = async (file: File) => {
+  const tooLarge = refuseTokenFile(file);
+
+  if (tooLarge) return showFileStatus(tooLarge, true);
+
+  const text = await file.text();
+  const refused = refuseTokenFile(file, text);
+
+  if (refused) return showFileStatus(refused, true);
+
+  if (presetEl.value === 'custom' && sourceEl.value !== text)
+    return askToReplace(file, text);
+
+  useFile(file, text);
+};
+
+loadFileEl.addEventListener('click', () => fileEl.click());
+fileEl.addEventListener('change', () => {
+  const [file] = fileEl.files ?? [];
+
+  // The same file can be chosen again
+  fileEl.value = '';
+
+  if (file) void loadFile(file);
+});
+
+// Dropping a file on the editor; dropped text is left to the textarea
+const hasFiles = (event: DragEvent) =>
+  event.dataTransfer?.types.includes('Files') ?? false;
+
+sourceBoxEl.addEventListener('dragover', (event) => {
+  if (!hasFiles(event)) return;
+
+  event.preventDefault();
+  sourceBoxEl.classList.add('is-dropping');
+});
+sourceBoxEl.addEventListener('dragleave', () =>
+  sourceBoxEl.classList.remove('is-dropping')
+);
+sourceBoxEl.addEventListener('drop', (event) => {
+  sourceBoxEl.classList.remove('is-dropping');
+
+  if (!hasFiles(event)) return;
+
+  event.preventDefault();
+
+  const [file] = event.dataTransfer?.files ?? [];
+
+  if (file) void loadFile(file);
+});
 prefixEl.addEventListener('input', () => {
   render();
   select(selectedId);

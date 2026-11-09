@@ -31,7 +31,7 @@ Nothing to install: open the site in a current browser. Both pages work with a k
 
 **[Playground](https://phun-ky.net/site-design-token-flow/playground)** renders single tokens as pills, so you can try your own.
 
-1. Pick the tokens to start from: a showcase with one token of every `$type`, or the bundled token file.
+1. Pick the tokens to start from: a showcase with one token of every `$type`, the bundled token file, or your own: "Load a file" opens a `.json` token file of up to 2 MB, or drop one on the editor. The file is read in your browser and never uploaded, and the playground asks before it replaces edits of your own.
 2. Edit the [DTCG 2025.10](https://www.designtokens.org/tr/2025.10/) JSON on the left. The pills update as you type. Every problem in the tokens is listed under the editor, each naming the token and the field, such as a value that doesn't match its `$type` or a reference to a missing token, and the valid tokens are still shown.
 3. Filter the pills by name or `$type`, and select a pill to see its token, resolved value, the tokens it references and the HTML that renders it, which you can copy.
 

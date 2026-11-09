@@ -323,6 +323,34 @@ select:hover {
   letter-spacing: 0;
 }
 
+/* The editor's heading, with "Load a file" next to it */
+.demo-editor-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+}
+.demo-file-hint,
+.demo-file-status {
+  margin: 0 0 0.5rem;
+  font-size: 12px;
+}
+.demo-file-status:empty {
+  display: none;
+}
+.demo-file-status .demo-link {
+  margin-left: 0.5rem;
+}
+.demo-file-status.is-refused {
+  color: var(--demo-error);
+}
+/* A file dragged over the editor */
+.demo-source.is-dropping {
+  outline: 2px dashed var(--demo-accent);
+  outline-offset: 2px;
+}
+
 /* Under the editor, once you have tokens of your own */
 .demo-flow:not([hidden]) {
   display: flex;

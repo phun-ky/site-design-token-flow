@@ -1,6 +1,6 @@
 'use strict';
 
-import { Arclace } from '@phun-ky/arclace';
+import { Arclace, type ArcConnectionDefinitionType } from '@phun-ky/arclace';
 
 import { describeFlowSource } from './app/flow-source';
 import { loadFonts } from './app/fonts';
@@ -250,11 +250,14 @@ DTF.prototype._align_columns = function (this: DTFInstance) {
 /**
  * Draws a line from every rendered token to each rendered token it references.
  * Arclace keeps the lines in sync with resizes, scrolling and DOM changes.
+ * The lines are added in one go: connecting them one by one redraws every
+ * line so far each time, which takes seconds with a large token file (#103).
  */
 DTF.prototype._connect_tokens = function (this: DTFInstance) {
   const _by_id = new Map<string, DesignToken>(
     this._tokens.map((token: DesignToken) => [token.id, token])
   );
+  const _connections: ArcConnectionDefinitionType[] = [];
 
   this._tokens.forEach((token: DesignToken) => {
     token.token.ancestors.forEach((ancestor_id) => {
@@ -262,7 +265,9 @@ DTF.prototype._connect_tokens = function (this: DTFInstance) {
 
       if (!_start_token) return;
 
-      this._arclace.connect(_start_token.el, token.el, {
+      _connections.push({
+        startElement: _start_token.el,
+        endElement: token.el,
         id: `${ancestor_id}--${token.id}`,
         className: 'dtf-line'
       });
@@ -270,6 +275,7 @@ DTF.prototype._connect_tokens = function (this: DTFInstance) {
       token.el.classList.add('is-connected');
     });
   });
+  this._arclace.connectAll(_connections);
 };
 
 DTF.prototype._init = function (this: DTFInstance) {
@@ -332,7 +338,7 @@ loadFonts(
 mountZoomControls((onChange) =>
   createZoom(
     document.querySelector('.app-viewport') as HTMLElement,
-    document.querySelector('.container') as HTMLElement,
+    document.querySelector('.app-canvas') as HTMLElement,
     onChange,
     () => document.querySelector('.flow .flow-column .design-token')
   )

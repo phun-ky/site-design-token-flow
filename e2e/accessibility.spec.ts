@@ -30,7 +30,7 @@ const STATES: {
     }
   },
   {
-    name: 'playground with problems and the replace dialog open',
+    name: 'playground with problems and the import wizard on its sets',
     path: 'playground',
     prepare: async (page) => {
       await page
@@ -38,11 +38,45 @@ const STATES: {
         .fill('{ "color": { "$type": "color", "a": { "$value": "{nope}" } } }');
       await expect(page.locator('#error li')).toHaveCount(1);
       await page.locator('#file').setInputFiles({
-        name: 'colors.tokens.json',
+        name: 'tokens.json',
         mimeType: 'application/json',
-        buffer: Buffer.from('{}')
+        buffer: Buffer.from(
+          JSON.stringify({
+            core: { red: { value: '#c14242', type: 'color' } },
+            light: { accent: { value: '{red}', type: 'color' } },
+            $themes: [
+              {
+                id: 'light',
+                name: 'Light',
+                selectedTokenSets: { core: 'source', light: 'enabled' }
+              }
+            ],
+            $metadata: { tokenSetOrder: ['core', 'light'] }
+          })
+        )
       });
-      await expect(page.getByRole('dialog')).toBeVisible();
+      await page.getByRole('button', { name: 'Next' }).click();
+      await expect(page.locator('.demo-sets')).toBeVisible();
+    }
+  },
+  {
+    name: 'playground with the export dialog open',
+    path: 'playground',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'Export' }).click();
+      await page.getByRole('radio', { name: /^Tokens Studio/ }).check();
+      await expect(page.locator('#export-preview')).toContainText('$metadata');
+    }
+  },
+  {
+    name: 'playground with the new token form open',
+    path: 'playground',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'New token' }).click();
+      await page.getByLabel('Name', { exact: true }).fill('accent');
+      await expect(
+        page.locator('#new-preview-pill .design-token')
+      ).toBeVisible();
     }
   },
   {

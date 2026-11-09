@@ -1,19 +1,51 @@
-// Checks token JSON off the main thread, so the playground stays usable while
-// a large file is checked (#109). Allowed by the Content Security Policy's
-// script-src 'self': the worker is a file from the site itself.
+// Checks and converts token JSON off the main thread, so the playground
+// stays usable while a large file is checked or converted (#109, #113).
+// Allowed by the Content Security Policy's script-src 'self': the worker is
+// a file from the site itself.
 import { checkTokenText, type CheckedTokens } from '../src/app/check-tokens';
+import {
+  convertTokenText,
+  type ConvertedTokens
+} from '../src/app/convert-tokens';
+import type { SetUse } from '../src/tokens/tokens-studio';
 
-export interface CheckRequest {
+interface CheckMessage {
   id: number;
+  kind: 'check';
   text: string;
 }
 
-export interface CheckResponse extends CheckedTokens {
+interface ConvertMessage {
   id: number;
+  kind: 'convert';
+  text: string;
+  theme?: string;
+  uses?: Record<string, SetUse>;
 }
 
-self.addEventListener('message', (event: MessageEvent<CheckRequest>) => {
-  const { id, text } = event.data;
+export type CheckRequest = CheckMessage | ConvertMessage;
 
-  self.postMessage({ id, ...checkTokenText(text) } satisfies CheckResponse);
+export type CheckResponse =
+  | ({ id: number; kind: 'check' } & CheckedTokens)
+  | { id: number; kind: 'convert'; converted: ConvertedTokens | null };
+
+self.addEventListener('message', (event: MessageEvent<CheckRequest>) => {
+  const request = event.data;
+
+  let response: CheckResponse;
+
+  if (request.kind === 'convert')
+    response = {
+      id: request.id,
+      kind: 'convert',
+      converted: convertTokenText(request.text, request)
+    };
+  else
+    response = {
+      id: request.id,
+      kind: 'check',
+      ...checkTokenText(request.text)
+    };
+
+  self.postMessage(response);
 });

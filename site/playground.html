@@ -134,10 +134,14 @@
               hidden
             />
             <p class="demo-muted demo-drop-hint">
-              JSON up to 2 MB, read in your browser and never uploaded
+              DTCG or Tokens Studio JSON up to 2 MB, read in your browser and
+              never uploaded
             </p>
           </div>
           <div id="file-status" class="demo-file-status" role="status"></div>
+          <button type="button" id="export-open" class="demo-button">
+            Export
+          </button>
 
           <label class="demo-field" for="prefix">
             <span class="demo-label">Prefix</span>
@@ -198,6 +202,14 @@
             <h2 id="pills-title">
               Pills <span id="count" class="demo-muted"></span>
             </h2>
+            <button
+              type="button"
+              id="new-token-open"
+              class="demo-button"
+              aria-controls="new-token"
+            >
+              New token
+            </button>
             <input
               id="filter"
               type="search"
@@ -214,52 +226,244 @@
           aria-label="Details"
           hidden
         ></aside>
+
+        <aside
+          class="demo-panel demo-details demo-new-token"
+          id="new-token"
+          aria-labelledby="new-token-title"
+          hidden
+        >
+          <form novalidate>
+            <div class="demo-details-head">
+              <h2 id="new-token-title">New token</h2>
+              <button
+                type="button"
+                class="demo-icon-button"
+                data-close-new
+                aria-label="Close the form"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M6 6l12 12" />
+                  <path d="M18 6 6 18" />
+                </svg>
+              </button>
+            </div>
+            <fieldset class="demo-kinds">
+              <legend class="visually-hidden">Kind</legend>
+              <label>
+                <input type="radio" name="new-kind" value="primitive" checked />
+                <span>Primitive <small>a value</small></span>
+              </label>
+              <label>
+                <input type="radio" name="new-kind" value="semantic" />
+                <span>Semantic <small>refers to a token</small></span>
+              </label>
+            </fieldset>
+            <label class="demo-field" for="new-group">
+              <span class="demo-label">Group</span>
+              <input
+                id="new-group"
+                type="text"
+                list="new-groups"
+                autocomplete="off"
+                aria-describedby="new-group-hint"
+              />
+              <datalist id="new-groups"></datalist>
+              <span id="new-group-hint" class="demo-hint">
+                Such as <code>color.feedback</code>; a new group is made
+              </span>
+            </label>
+            <label class="demo-field" for="new-name">
+              <span class="demo-label">Name</span>
+              <input
+                id="new-name"
+                type="text"
+                autocomplete="off"
+                required
+                aria-describedby="new-name-hint"
+              />
+              <span
+                id="new-name-hint"
+                class="demo-hint"
+                aria-live="polite"
+              ></span>
+            </label>
+            <div class="demo-field" data-for="primitive">
+              <label class="demo-label" for="new-type">Type</label>
+              <select id="new-type">
+                <option>color</option>
+                <option>dimension</option>
+                <option>number</option>
+                <option>fontFamily</option>
+                <option>fontWeight</option>
+                <option>duration</option>
+                <option>cubicBezier</option>
+                <option>strokeStyle</option>
+                <option>shadow</option>
+                <option>border</option>
+                <option>transition</option>
+                <option>typography</option>
+                <option>gradient</option>
+              </select>
+              <div id="new-value"></div>
+            </div>
+            <div class="demo-field" data-for="semantic" hidden>
+              <label class="demo-label" for="new-ref-search">Refers to</label>
+              <input
+                id="new-ref-search"
+                type="search"
+                placeholder="Search your tokens"
+                autocomplete="off"
+              />
+              <div
+                id="new-ref-list"
+                class="demo-ref-list"
+                role="radiogroup"
+                aria-label="The token it refers to"
+              ></div>
+            </div>
+            <label class="demo-field" for="new-description">
+              <span class="demo-label">Description, optional</span>
+              <input id="new-description" type="text" autocomplete="off" />
+            </label>
+            <div class="demo-new-preview">
+              <span class="demo-label">Preview</span>
+              <div id="new-preview-pill"></div>
+              <pre id="new-preview-json"></pre>
+            </div>
+            <p id="new-problem" class="demo-new-problem" role="alert"></p>
+            <div class="demo-dialog-actions">
+              <button type="button" class="demo-button" data-close-new>
+                Cancel
+              </button>
+              <button type="submit" class="demo-button demo-button-primary">
+                Add token
+              </button>
+            </div>
+          </form>
+        </aside>
       </div>
     </main>
 
-    <dialog id="replace" class="demo-dialog" aria-labelledby="replace-title">
+    <dialog
+      id="import"
+      class="demo-dialog demo-wizard"
+      aria-labelledby="import-title"
+    >
       <form method="dialog">
-        <h2 id="replace-title">Replace your edits with this file?</h2>
-        <div class="demo-compare">
-          <div class="demo-compare-side">
-            <span class="demo-muted">Your edits</span>
-            <strong id="replace-yours-count"></strong>
-            <span id="replace-yours-problems"></span>
-          </div>
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            aria-hidden="true"
-          >
-            <path d="M19 12H5" />
-            <path d="m11 6-6 6 6 6" />
-          </svg>
-          <div class="demo-compare-side is-file">
-            <code id="replace-file-name"></code>
-            <strong id="replace-file-count"></strong>
-            <span id="replace-file-problems"></span>
-          </div>
+        <div class="demo-wizard-head">
+          <h2 id="import-title">Import <code id="import-name"></code></h2>
+          <ol
+            id="import-steps"
+            class="demo-wizard-steps"
+            aria-label="Steps"
+          ></ol>
         </div>
-        <p>Your edits can’t be brought back after this.</p>
+        <div id="import-body" class="demo-wizard-body"></div>
         <div class="demo-dialog-actions">
-          <button type="submit" value="keep" class="demo-button" autofocus>
-            Keep my edits
+          <button type="submit" value="cancel" class="demo-button">
+            Cancel
+          </button>
+          <button type="button" id="import-back" class="demo-button">
+            Back
           </button>
           <button
-            type="submit"
-            value="replace"
+            type="button"
+            id="import-next"
             class="demo-button demo-button-primary"
           >
-            Replace with the file
+            Next
           </button>
         </div>
       </form>
     </dialog>
+
+    <dialog
+      id="export"
+      class="demo-dialog demo-export"
+      aria-labelledby="export-title"
+    >
+      <form method="dialog">
+        <div class="demo-export-grid">
+          <div class="demo-export-options">
+            <h2 id="export-title">Export your tokens</h2>
+            <fieldset class="demo-formats">
+              <legend class="demo-label">Format</legend>
+              <label class="demo-format">
+                <input type="radio" name="export-format" value="dtcg" checked />
+                <span>
+                  DTCG 2025.10
+                  <span class="demo-muted">
+                    The standard format, for Style Dictionary, Terrazzo and
+                    other tools
+                  </span>
+                </span>
+              </label>
+              <label class="demo-format">
+                <input
+                  type="radio"
+                  name="export-format"
+                  value="tokens-studio"
+                />
+                <span>
+                  Tokens Studio
+                  <span class="demo-muted">
+                    For the Figma plugin: <code>value</code> and
+                    <code>type</code>, in token sets
+                  </span>
+                </span>
+              </label>
+            </fieldset>
+            <label
+              class="demo-field"
+              id="export-set-field"
+              for="export-set"
+              hidden
+            >
+              <span class="demo-label">Token set for new tokens</span>
+              <input id="export-set" type="text" autocomplete="off" />
+            </label>
+            <label class="demo-field" for="export-name">
+              <span class="demo-label">File name</span>
+              <input id="export-name" type="text" autocomplete="off" />
+            </label>
+            <p id="export-note" class="demo-hint"></p>
+          </div>
+          <div class="demo-export-preview">
+            <span class="demo-label">Preview</span>
+            <pre
+              id="export-preview"
+              tabindex="0"
+              aria-label="Preview of the file"
+            ></pre>
+          </div>
+        </div>
+        <div class="demo-dialog-actions">
+          <button type="submit" value="close" class="demo-button">Close</button>
+          <button type="button" id="export-copy" class="demo-button">
+            Copy JSON
+          </button>
+          <button
+            type="button"
+            id="export-download"
+            class="demo-button demo-button-primary"
+          >
+            Download
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <p id="announce" class="visually-hidden" role="status"></p>
 
     <script type="module" src="./playground-main.ts"></script>
   </body>

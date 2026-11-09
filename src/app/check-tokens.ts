@@ -56,13 +56,17 @@ export const checkTokenText = (text: string): CheckedTokens => {
 };
 
 /**
- * About how many tokens a text holds, before checking it: one per `$value`.
+ * About how many tokens a text holds, before checking it: one per `$value`,
+ * or per `value` in a Tokens Studio file without `$value`.
  *
  * @param {string} text The JSON
  * @returns {number} The count
  */
 export const countTokens = (text: string): number =>
-  text.match(/"\$value"\s*:/g)?.length ?? 0;
+  text.match(/"\$value"\s*:/g)?.length ??
+  // A Tokens Studio file in its legacy format
+  text.match(/"value"\s*:/g)?.length ??
+  0;
 
 /**
  * The line a problem is on, from 1, to move the editor there: the line of

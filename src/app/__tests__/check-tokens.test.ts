@@ -63,6 +63,10 @@ describe('countTokens', () => {
   it('counts one token per $value', () => {
     assert.equal(countTokens(VALID), 2);
     assert.equal(countTokens('{}'), 0);
+    assert.equal(
+      countTokens('{ "a": { "value": "#fff", "type": "color" } }'),
+      1
+    );
   });
 });
 

@@ -2,10 +2,12 @@
 
 import { Arclace } from '@phun-ky/arclace';
 
+import { describeFlowSource } from './app/flow-source';
 import { loadFonts } from './app/fonts';
 import { mountHeader } from './app/header';
+import { browserStorage, chooseFlowTokens } from './app/saved-tokens';
 import { createZoom, mountZoomControls } from './app/zoom';
-import tokens from './assets/data/design-tokens.tokens.json';
+import exampleTokens from './assets/data/design-tokens.tokens.json';
 import DesignToken from './classes/DesignToken';
 import {
   FlowLane,
@@ -288,9 +290,42 @@ DTF.prototype._init = function (this: DTFInstance) {
 };
 
 mountHeader();
-new DTF(tokens as DTCGDocument);
+
+// Your tokens from the playground, saved in this browser, or the example
+const flowTokens = chooseFlowTokens(
+  browserStorage(),
+  new URLSearchParams(window.location.search).get('tokens') === 'example'
+);
+const doc =
+  flowTokens.kind === 'yours'
+    ? flowTokens.doc
+    : (exampleTokens as DTCGDocument);
+const sourceEl = document.querySelector<HTMLElement>('#tokens-source');
+
+if (sourceEl) {
+  const { text, links } = describeFlowSource(flowTokens);
+
+  sourceEl.replaceChildren(
+    text,
+    ...links.flatMap(({ label, href }) => {
+      const link = document.createElement('a');
+
+      link.href = href;
+      link.textContent = label;
+
+      return [' ', link];
+    })
+  );
+  sourceEl.hidden = false;
+}
+
+new DTF(doc);
 // The fonts the font tokens describe; each downloads when a pill first shows it
-loadFonts(getFontFaces(flattenTokens(tokens as DTCGDocument)));
+loadFonts(
+  getFontFaces(
+    flowTokens.kind === 'yours' ? flowTokens.tokens : flattenTokens(doc)
+  )
+);
 
 // The canvas: the wheel and dragging pan, Ctrl or Cmd and the wheel zoom. On a
 // phone it opens on the first token of the inheritance flow, at a readable scale

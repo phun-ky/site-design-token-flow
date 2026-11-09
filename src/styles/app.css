@@ -113,6 +113,18 @@ body {
   font-size: 0.875rem;
   line-height: 1.4;
 }
+/* Whose tokens the flow shows, with links to change it */
+.app-tokens-source {
+  flex-basis: 100%;
+  max-width: 60rem;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+.app-tokens-source a {
+  margin-left: 0.5rem;
+  color: var(--app-brand);
+}
 /* Global header, after the VitePress style of the Arclace docs */
 .app-header {
   position: fixed;

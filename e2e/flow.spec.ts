@@ -156,7 +156,7 @@ test('switches the theme, and keeps it on reload and on the playground', async (
   await page.reload();
   expect(await isLight()).toBe(!wasLight);
 
-  await page.getByRole('link', { name: 'Playground' }).click();
+  await page.getByRole('link', { name: 'Playground', exact: true }).click();
   await expect(page).toHaveURL(/\/playground$/);
   expect(await isLight()).toBe(!wasLight);
 });

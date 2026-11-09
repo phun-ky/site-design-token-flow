@@ -23,6 +23,10 @@ export {
 
 export type { TokenProblem } from './utils/design-tokens';
 
+export { mergeTokenDocuments } from './utils/merge-tokens';
+
+export type { Merge, Overwrite } from './utils/merge-tokens';
+
 export { getFontFaces } from './utils/font-faces';
 
 export { fitWrappedValues, widestLine } from './utils/fit-values';

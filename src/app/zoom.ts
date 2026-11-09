@@ -292,7 +292,12 @@ export const createZoom = (
   const apply = (next: ZoomState, touched = true) => {
     state = next;
     untouched = !touched;
-    content.style.transform = `translate(${state.x}px, ${state.y}px) scale(${state.scale})`;
+
+    // Offsets to a hundredth of a pixel: centring leaves remainders such as
+    // 5.7e-14, which would be written in exponent notation
+    const round = (value: number) => Math.round(value * 100) / 100;
+
+    content.style.transform = `translate(${round(state.x)}px, ${round(state.y)}px) scale(${state.scale})`;
     onChange?.(state, state.scale / base);
   };
   const widthState = () =>

@@ -86,6 +86,39 @@ test('filters, switches to the bundled tokens and reports invalid JSON', async (
   await expect(page.locator(pills)).toHaveCount(1);
 });
 
+test('lists every problem in the tokens, and shows the valid ones', async ({
+  page
+}) => {
+  await page.locator('#source').fill(
+    JSON.stringify({
+      color: {
+        $type: 'color',
+        blue: { $value: { colorSpace: 'srgb', components: [0, 0.33, 0.94] } },
+        accent: { $value: '{color.blu}' }
+      },
+      size: { $type: 'dimension', r: { $value: { value: '1px', unit: 'px' } } }
+    })
+  );
+
+  const problems = page.locator('#error li');
+
+  await expect(page.locator('#error [role="alert"]')).toHaveText(
+    '2 problems in the tokens'
+  );
+  await expect(problems).toHaveText([
+    'Unresolvable reference "{color.blu}" in "color.accent"',
+    'Invalid token "size.r" (dimension): $value.value must be a number, got "1px"'
+  ]);
+  await expect(page.locator(pills)).toHaveCount(1);
+
+  await page.locator('#source').fill('{ "color": ');
+  await expect(problems).toHaveCount(1);
+  await expect(page.locator('#error [role="alert"]')).toHaveText(
+    '1 problem in the tokens'
+  );
+  await expect(page.locator(pills)).toHaveCount(0);
+});
+
 test('keeps the editor to part of the screen on a phone', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();

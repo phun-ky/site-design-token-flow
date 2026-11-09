@@ -17,8 +17,11 @@ export {
   getExtension,
   parseAlias,
   strokeStyleToCss,
-  toCssValue
+  toCssValue,
+  validateTokens
 } from './utils/design-tokens';
+
+export type { TokenProblem } from './utils/design-tokens';
 
 export { getFontFaces } from './utils/font-faces';
 

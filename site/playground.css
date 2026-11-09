@@ -200,6 +200,17 @@ select:hover {
   font-size: 12px;
   white-space: pre-wrap;
 }
+.demo-error-summary {
+  margin: 0;
+  font-family: var(--dtf-font-family);
+  font-weight: 600;
+}
+.demo-error ul {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.25rem 0 0;
+  padding-left: 1.25rem;
+}
 
 .demo-toolbar {
   display: flex;

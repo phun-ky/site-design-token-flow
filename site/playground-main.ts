@@ -13,11 +13,11 @@ import {
   DTCGDocument,
   fitWrappedValues,
   FlatDesignToken,
-  flattenTokens,
   getDesignTokenKind,
   getFontFaces,
+  toCssValue,
   renderDesignToken,
-  toCssValue
+  validateTokens
 } from '../src/tokens';
 
 import showcaseTokens from './showcase.tokens.json';
@@ -37,7 +37,7 @@ const sourceCodeEl = $<HTMLElement>('.demo-source-code');
 const presetEl = $<HTMLSelectElement>('#preset');
 const prefixEl = $<HTMLInputElement>('#prefix');
 const filterEl = $<HTMLInputElement>('#filter');
-const errorEl = $<HTMLParagraphElement>('#error');
+const errorEl = $<HTMLDivElement>('#error');
 const groupsEl = $<HTMLDivElement>('#groups');
 const countEl = $<HTMLSpanElement>('#count');
 const detailsEl = $<HTMLElement>('#details');
@@ -128,20 +128,43 @@ sourceEl.addEventListener('scroll', () => {
   sourceCodeEl.scrollLeft = sourceEl.scrollLeft;
 });
 
-const showError = (message?: string) => {
-  errorEl.hidden = !message;
-  errorEl.textContent = message ?? '';
+/** Lists the problems in the tokens under the editor, or hides the list */
+const showProblems = (messages: string[]) => {
+  const summary = document.createElement('p');
+  const list = document.createElement('ul');
+
+  errorEl.hidden = messages.length === 0;
+  summary.setAttribute('role', 'alert');
+  summary.className = 'demo-error-summary';
+  summary.textContent =
+    messages.length === 1
+      ? '1 problem in the tokens'
+      : `${messages.length} problems in the tokens`;
+  list.append(
+    ...messages.map((message) => {
+      const item = document.createElement('li');
+
+      item.textContent = message;
+
+      return item;
+    })
+  );
+  errorEl.replaceChildren(...(messages.length ? [summary, list] : []));
 };
+// Shows the valid tokens, and lists every problem in the others
 const parse = () => {
   try {
-    tokens = flattenTokens(JSON.parse(sourceEl.value) as DTCGDocument);
+    const result = validateTokens(JSON.parse(sourceEl.value) as DTCGDocument);
+
+    tokens = result.tokens;
     // Fonts the tokens describe; the Content Security Policy only allows
     // files from the site itself
     loadFonts(getFontFaces(tokens));
-    showError();
+    showProblems(result.problems.map(({ message }) => message));
   } catch (error) {
+    // Not JSON
     tokens = [];
-    showError((error as Error).message);
+    showProblems([(error as Error).message]);
   }
 
   render();

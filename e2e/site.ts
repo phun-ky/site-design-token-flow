@@ -35,7 +35,7 @@ export const canvasTransform = async (
   page: Page
 ): Promise<{ x: number; y: number; scale: number }> => {
   const transform = await page
-    .locator('.container')
+    .locator('.app-canvas')
     .evaluate((element) => (element as HTMLElement).style.transform);
   const [, x, y, scale] =
     /translate\((-?[\d.]+)px, (-?[\d.]+)px\) scale\(([\d.]+)\)/.exec(

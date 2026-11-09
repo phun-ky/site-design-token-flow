@@ -275,7 +275,9 @@ body {
   cursor: grabbing;
   user-select: none;
 }
-.app-viewport > .container {
+.app-canvas {
+  width: max-content;
+  min-width: 100%;
   transform-origin: 0 0;
 }
 /* Zoom pane, bottom right */

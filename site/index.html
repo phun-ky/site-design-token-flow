@@ -91,7 +91,11 @@
         aria-label="Token flow canvas"
         aria-describedby="canvas-keys"
       >
-        <div class="container" id="scene"></div>
+        <!-- The canvas moves and zooms; the lines are drawn inside .container,
+             which stays still within it, so moving needs no redraw -->
+        <div class="app-canvas">
+          <div class="container" id="scene"></div>
+        </div>
       </section>
       <p id="canvas-keys" class="visually-hidden">
         Arrow keys pan, Shift and an arrow key pan further, plus and minus zoom,

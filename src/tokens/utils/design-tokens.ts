@@ -129,65 +129,316 @@ interface RawEntry {
   groupDeprecated?: boolean | string;
 }
 
+/** A problem in a token document, at the token or group it is in */
+export interface TokenProblem {
+  /** The token or group's name, such as `color.cta`; empty for the document */
+  path: string;
+  /** What is wrong, naming the token and field */
+  message: string;
+  /** The error `flattenTokens` throws for it */
+  error: Error;
+}
+
+/** What `collect` found: the tokens, and the problems in the order they are in */
+interface Collected {
+  entries: RawEntry[];
+  problems: TokenProblem[];
+  /** Tokens and groups left out because of a problem, by name */
+  skipped: Set<string>;
+  /** Each token and group's position in the document */
+  order: Map<string, number>;
+}
+
+const toProblem = (path: string, error: unknown): TokenProblem => {
+  const err = error instanceof Error ? error : Error(String(error));
+
+  return { path, message: err.message, error: err };
+};
 const collect = (
   doc: DTCGDocument,
   group: AnyObject,
   path: string[],
   groupType: DTCGType | undefined,
   groupDeprecated: boolean | string | undefined,
-  entries: RawEntry[]
+  found: Collected
 ): void => {
-  const resolved = extendGroup(doc, group, [path.join('.')]);
+  const name = path.join('.');
 
-  validateProperties('group', path.join('.'), resolved);
+  let resolved: AnyObject;
+
+  found.order.set(name, found.order.size);
+
+  try {
+    resolved = extendGroup(doc, group, [name]);
+    validateProperties('group', name, resolved);
+  } catch (error) {
+    found.problems.push(toProblem(name, error));
+    found.skipped.add(name);
+
+    return;
+  }
 
   const type = (resolved.$type as DTCGType | undefined) ?? groupType;
   const deprecated =
     (resolved.$deprecated as boolean | string | undefined) ?? groupDeprecated;
 
-  childNames(resolved).forEach((name) => {
-    const child = resolved[name];
-    const childPath = [...path, name];
+  childNames(resolved).forEach((child) => {
+    const value = resolved[child];
+    const childPath = [...path, child];
+    const childName = childPath.join('.');
 
-    if (name !== '$root' && FORBIDDEN_NAME_PATTERN.test(name)) {
-      throw Error(
-        `Invalid name "${childPath.join('.')}": names must not contain "{", "}" or "."`
-      );
-    }
-
-    if (!isObject(child)) return;
-
-    if (isToken(child)) {
-      if (childNames(child).length) {
+    try {
+      if (child !== '$root' && FORBIDDEN_NAME_PATTERN.test(child)) {
         throw Error(
-          `"${childPath.join('.')}" has a $value and children, which is invalid`
+          `Invalid name "${childName}": names must not contain "{", "}" or "."`
         );
       }
 
-      validateProperties('token', childPath.join('.'), child);
+      if (!isObject(value)) return;
 
-      entries.push({
+      if (!isToken(value)) {
+        collect(doc, value, childPath, type, deprecated, found);
+
+        return;
+      }
+
+      found.order.set(childName, found.order.size);
+
+      if (childNames(value).length) {
+        throw Error(
+          `"${childName}" has a $value and children, which is invalid`
+        );
+      }
+
+      validateProperties('token', childName, value);
+      found.entries.push({
         path: childPath,
-        token: child,
+        token: value,
         groupType: type,
         groupDeprecated: deprecated
       });
-    } else {
-      collect(doc, child, childPath, type, deprecated, entries);
+    } catch (error) {
+      found.order.set(
+        childName,
+        found.order.get(childName) ?? found.order.size
+      );
+      found.problems.push(toProblem(childName, error));
+      found.skipped.add(childName);
     }
   });
 };
 const toId = (path: string[]): string =>
   path.filter((segment) => segment !== '$root').join('-');
 
+// Thrown while resolving a token whose reference has a problem of its own: that
+// problem is reported once, at the token that has it
+class DependentProblem extends Error {}
+
 /**
- * Flattens a DTCG token document into a list of tokens with resolved types and values.
+ * Validates a DTCG token document and flattens it into a list of tokens with
+ * resolved types and values, collecting every problem instead of stopping at
+ * the first.
  *
  * Supports group `$type` inheritance, `$root` tokens, `$extends`, `$deprecated` inheritance,
  * curly brace aliases (`{group.token}`) and JSON Pointer references (`{ "$ref": "#/group/token/$value" }`),
- * also inside composite values. Circular references, invalid names and untyped tokens throw,
- * and so does a value that doesn't match its `$type` (a `TypeError` or `RangeError` naming
- * the token and field, see `validateTokenValue`).
+ * also inside composite values. Problems are circular references, references to missing tokens,
+ * invalid names and properties, untyped tokens, and values that don't match their `$type`
+ * (see `validateTokenValue`). Each is reported once, where it is: a token that only references
+ * a token with a problem is left out, but not reported.
+ *
+ * @param {DTCGDocument} doc - The token document, e.g. the parsed contents of a `*.tokens.json` file
+ * @returns {{ tokens: FlatDesignToken[]; problems: TokenProblem[] }} The valid tokens and the problems, both in document order
+ * @example
+ * ```ts
+ * const { tokens, problems } = validateTokens({
+ *   color: {
+ *     $type: 'color',
+ *     blue: { $value: { colorSpace: 'srgb', components: [0, 0.33, 0.94] } },
+ *     accent: { $value: '{color.blu}' }
+ *   }
+ * });
+ * tokens.length; // 1
+ * problems[0].message; // 'Unresolvable reference "{color.blu}" in "color.accent"'
+ * ```
+ */
+export const validateTokens = (
+  doc: DTCGDocument
+): { tokens: FlatDesignToken[]; problems: TokenProblem[] } => {
+  const found: Collected = {
+    entries: [],
+    problems: [],
+    skipped: new Set(),
+    order: new Map()
+  };
+
+  collect(doc, doc, [], undefined, undefined, found);
+
+  const { entries, problems, skipped, order } = found;
+  const byName = new Map(entries.map((entry) => [entry.path.join('.'), entry]));
+  const resolved = new Map<string, FlatDesignToken>();
+  // Tokens with a problem, their own or one they reference
+  const failed = new Set<string>();
+  // A token or group left out of the document because of a problem
+  const isSkipped = (name: string): boolean =>
+    [...skipped].some(
+      (skippedName) =>
+        skippedName === '' ||
+        name === skippedName ||
+        name.startsWith(`${skippedName}.`)
+    );
+  const resolveToken = (name: string, stack: string[]): FlatDesignToken => {
+    const cached = resolved.get(name);
+
+    if (cached) return cached;
+
+    if (failed.has(name)) throw new DependentProblem(name);
+
+    if (stack.includes(name))
+      throw Error(`Circular reference: ${[...stack, name].join(' → ')}`);
+
+    const entry = byName.get(name);
+
+    if (!entry) {
+      if (isSkipped(name)) throw new DependentProblem(name);
+
+      throw Error(
+        `Unresolvable reference "{${name}}"${stack.length ? ` in "${stack.at(-1)}"` : ''}`
+      );
+    }
+
+    try {
+      const nextStack = [...stack, name];
+      const ancestors = new Set<string>();
+
+      let referencedType: DTCGType | undefined;
+
+      // References to whole tokens, by the field they are in, to check their $type
+      const references: TokenReference[] = [];
+      const resolveValue = (value: unknown, field = '$value'): unknown => {
+        const isWholeValue = field === '$value';
+        const alias = parseAlias(value);
+
+        if (alias) {
+          const target = resolveToken(alias, nextStack);
+
+          ancestors.add(target.id);
+          references.push({ field, name: target.name, $type: target.$type });
+
+          if (isWholeValue) referencedType = target.$type;
+
+          return target.value;
+        }
+
+        if (isReference(value)) {
+          const segments = parsePointer(value.$ref);
+          const valueIndex = segments.indexOf('$value');
+          const tokenSegments =
+            valueIndex === -1 ? segments : segments.slice(0, valueIndex);
+          const target = resolveToken(tokenSegments.join('.'), nextStack);
+
+          ancestors.add(target.id);
+
+          // A pointer to the token or its whole $value references the token; a
+          // pointer into its value (such as one color component) is checked by shape
+          if (valueIndex === -1 || segments.length === valueIndex + 1) {
+            references.push({ field, name: target.name, $type: target.$type });
+
+            if (isWholeValue) referencedType = target.$type;
+          }
+
+          return valueIndex === -1
+            ? target.value
+            : getAt(target.value, segments.slice(valueIndex + 1));
+        }
+
+        if (Array.isArray(value))
+          return value.map((item, index) =>
+            resolveValue(item, `${field}[${index}]`)
+          );
+
+        if (isObject(value)) {
+          return Object.fromEntries(
+            Object.entries(value).map(([key, item]) => [
+              key,
+              resolveValue(item, `${field}.${key}`)
+            ])
+          );
+        }
+
+        return value;
+      };
+      const { token, path, groupType, groupDeprecated } = entry;
+      const value = resolveValue(token.$value);
+      const $type = token.$type ?? referencedType ?? groupType;
+
+      if (!$type)
+        throw Error(
+          `"${name}" has no $type: set it on the token or a parent group`
+        );
+
+      // The resolved value, aliases included, must match its $type
+      validateTokenValue(name, $type, value, references);
+
+      const $deprecated = token.$deprecated ?? groupDeprecated;
+      const flat: FlatDesignToken = {
+        id: toId(path),
+        name,
+        path,
+        $type,
+        $value: token.$value,
+        value: value as FlatDesignToken['value'],
+        aliasOf: parseAlias(token.$value),
+        ancestors: [...ancestors],
+        descendants: [],
+        ...(token.$description !== undefined && {
+          $description: token.$description
+        }),
+        ...($deprecated !== undefined &&
+          $deprecated !== false && { $deprecated }),
+        ...(token.$extensions !== undefined && {
+          $extensions: token.$extensions
+        })
+      };
+
+      resolved.set(name, flat);
+
+      return flat;
+    } catch (error) {
+      failed.add(name);
+
+      if (!(error instanceof DependentProblem))
+        problems.push(toProblem(name, error));
+
+      throw new DependentProblem(name);
+    }
+  };
+  const tokens: FlatDesignToken[] = [];
+
+  entries.forEach((entry) => {
+    try {
+      tokens.push(resolveToken(entry.path.join('.'), []));
+    } catch {
+      // Its problem is in `problems` already: resolveToken reports each one
+      // where it is, then throws a DependentProblem
+    }
+  });
+
+  const byId = new Map(tokens.map((token) => [token.id, token]));
+
+  tokens.forEach((token) =>
+    token.ancestors.forEach((id) => byId.get(id)?.descendants.push(token.id))
+  );
+  problems.sort(
+    (a, b) => (order.get(a.path) ?? Infinity) - (order.get(b.path) ?? Infinity)
+  );
+
+  return { tokens, problems };
+};
+
+/**
+ * Flattens a DTCG token document into a list of tokens with resolved types and values.
+ * Like `validateTokens`, but throws the document's first problem: a `TypeError` or
+ * `RangeError` for a value that doesn't match its `$type`, an `Error` for the others.
  *
  * @param {DTCGDocument} doc - The token document, e.g. the parsed contents of a `*.tokens.json` file
  * @returns {FlatDesignToken[]} The tokens, in document order
@@ -205,128 +456,9 @@ const toId = (path: string[]): string =>
  * ```
  */
 export const flattenTokens = (doc: DTCGDocument): FlatDesignToken[] => {
-  const entries: RawEntry[] = [];
+  const { tokens, problems } = validateTokens(doc);
 
-  collect(doc, doc, [], undefined, undefined, entries);
-
-  const byName = new Map(entries.map((entry) => [entry.path.join('.'), entry]));
-  const resolved = new Map<string, FlatDesignToken>();
-  const resolveToken = (name: string, stack: string[]): FlatDesignToken => {
-    const cached = resolved.get(name);
-
-    if (cached) return cached;
-
-    if (stack.includes(name))
-      throw Error(`Circular reference: ${[...stack, name].join(' → ')}`);
-
-    const entry = byName.get(name);
-
-    if (!entry)
-      throw Error(
-        `Unresolvable reference "{${name}}"${stack.length ? ` in "${stack.at(-1)}"` : ''}`
-      );
-
-    const nextStack = [...stack, name];
-    const ancestors = new Set<string>();
-
-    let referencedType: DTCGType | undefined;
-
-    // References to whole tokens, by the field they are in, to check their $type
-    const references: TokenReference[] = [];
-    const resolveValue = (value: unknown, field = '$value'): unknown => {
-      const isWholeValue = field === '$value';
-      const alias = parseAlias(value);
-
-      if (alias) {
-        const target = resolveToken(alias, nextStack);
-
-        ancestors.add(target.id);
-        references.push({ field, name: target.name, $type: target.$type });
-
-        if (isWholeValue) referencedType = target.$type;
-
-        return target.value;
-      }
-
-      if (isReference(value)) {
-        const segments = parsePointer(value.$ref);
-        const valueIndex = segments.indexOf('$value');
-        const tokenSegments =
-          valueIndex === -1 ? segments : segments.slice(0, valueIndex);
-        const target = resolveToken(tokenSegments.join('.'), nextStack);
-
-        ancestors.add(target.id);
-
-        // A pointer to the token or its whole $value references the token; a
-        // pointer into its value (such as one color component) is checked by shape
-        if (valueIndex === -1 || segments.length === valueIndex + 1) {
-          references.push({ field, name: target.name, $type: target.$type });
-
-          if (isWholeValue) referencedType = target.$type;
-        }
-
-        return valueIndex === -1
-          ? target.value
-          : getAt(target.value, segments.slice(valueIndex + 1));
-      }
-
-      if (Array.isArray(value))
-        return value.map((item, index) =>
-          resolveValue(item, `${field}[${index}]`)
-        );
-
-      if (isObject(value)) {
-        return Object.fromEntries(
-          Object.entries(value).map(([key, item]) => [
-            key,
-            resolveValue(item, `${field}.${key}`)
-          ])
-        );
-      }
-
-      return value;
-    };
-    const { token, path, groupType, groupDeprecated } = entry;
-    const value = resolveValue(token.$value);
-    const $type = token.$type ?? referencedType ?? groupType;
-
-    if (!$type)
-      throw Error(
-        `"${name}" has no $type: set it on the token or a parent group`
-      );
-
-    // The resolved value, aliases included, must match its $type
-    validateTokenValue(name, $type, value, references);
-
-    const $deprecated = token.$deprecated ?? groupDeprecated;
-    const flat: FlatDesignToken = {
-      id: toId(path),
-      name,
-      path,
-      $type,
-      $value: token.$value,
-      value: value as FlatDesignToken['value'],
-      aliasOf: parseAlias(token.$value),
-      ancestors: [...ancestors],
-      descendants: [],
-      ...(token.$description !== undefined && {
-        $description: token.$description
-      }),
-      ...($deprecated !== undefined &&
-        $deprecated !== false && { $deprecated }),
-      ...(token.$extensions !== undefined && { $extensions: token.$extensions })
-    };
-
-    resolved.set(name, flat);
-
-    return flat;
-  };
-  const tokens = entries.map((entry) => resolveToken(entry.path.join('.'), []));
-  const byId = new Map(tokens.map((token) => [token.id, token]));
-
-  tokens.forEach((token) =>
-    token.ancestors.forEach((id) => byId.get(id)?.descendants.push(token.id))
-  );
+  if (problems.length > 0) throw problems[0].error;
 
   return tokens;
 };

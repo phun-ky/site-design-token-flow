@@ -51,8 +51,9 @@ What you can rely on:
 - **Your settings and tokens stay in your browser.** The light or dark theme
   choice is kept in `localStorage` (`dtf-theme`). The pill playground keeps the
   chosen preset, the token JSON you edit there and its last version without
-  problems (`dtf-demo`), which the flow view reads to draw your tokens. Nothing
-  else is stored, and clearing the site's data removes it.
+  problems (`dtf-demo`), which the flow view reads to draw your tokens. A token
+  file you load is read in the browser and kept the same way, never uploaded.
+  Nothing else is stored, and clearing the site's data removes it.
 - **Nothing is loaded from other hosts.** Scripts, styles and the IBM Plex
   Sans font files the font tokens describe come from the site itself; the
   site's own text uses the system's fonts. The Content Security Policy below

@@ -6,7 +6,7 @@ This folder is meant to become its own npm package. Until then, it lives here so
 
 ## Boundary rules
 
-- The app imports this folder only through [`index.ts`](./index.ts), plus the stylesheet in [`styles/`](./styles).
+- The app imports this folder only through [`index.ts`](./index.ts) and [`tokens-studio.ts`](./tokens-studio.ts), plus the stylesheet in [`styles/`](./styles). `tokens-studio.ts` is an entry of its own, a subpath export of the package later, so code that only renders pills doesn't load the converter.
 - Nothing in here imports app code (flow view, Arclace lines, `site/` pages, app data).
 - App-only styling goes in `src/styles/`, not here.
 
@@ -25,7 +25,21 @@ This folder is meant to become its own npm package. Until then, it lives here so
 | `fitWrappedValues(root?)`                                 | Narrows wrapped pill values to their widest line, after rendering and when fonts load                                                                                                                                                                                                               |
 | `getFontFaces(tokens)`                                    | Font faces (family, `src` and descriptors) that `fontFamily` tokens describe                                                                                                                                                                                                                        |
 | `DTF_EXTENSION_KEY`, `getExtension(token)`                | This tool's `$extensions` data                                                                                                                                                                                                                                                                      |
+| `mergeTokenDocuments(base, incoming)`                     | Merges one document into a copy of another: returns `{ document, added, overwritten, unchanged }`. A token of the same name is overwritten; each incoming token keeps the `$type` its own groups give it                                                                                            |
 | Types                                                     | `DTCGDocument`, `FlatDesignToken`, every `$type` value shape                                                                                                                                                                                                                                        |
+
+### Tokens Studio, from [`tokens-studio.ts`](./tokens-studio.ts)
+
+| Export                                | What it does                                                                                                                                                                                                                                                    |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `isTokensStudio(json)`                | Whether JSON is a Tokens Studio for Figma file: `$themes` or `$metadata`, `value`/`type` keys, a type only Tokens Studio uses, or a colour written as a string                                                                                                  |
+| `readTokensStudio(json)`              | Its token sets in order, themes and key style. Top-level keys are sets when the file has `$themes` or `$metadata`; otherwise the whole file is one set                                                                                                          |
+| `setsForTheme(file, theme?)`          | Each set's use for a theme: enabled and source sets included, disabled ones left out                                                                                                                                                                            |
+| `convertTokensStudio(file, uses)`     | A DTCG 2025.10 document and a report of every token whose math was worked out, references resolved, colour modifier applied, value changed or filled in, overridden by a later set, or left out. What DTCG can't hold is kept in `$extensions` for the way back |
+| `toTokensStudio(tokens, root?, set?)` | Tokens as a Tokens Studio file: unchanged tokens from Tokens Studio as they were, in their sets, with the file's themes and the tokens left out; changed and new tokens converted                                                                               |
+| `evaluateMath(text)`                  | Tokens Studio's math, such as `8px * 2`, with a parser of its own, never `eval`                                                                                                                                                                                 |
+
+Colour modifiers (lighten, darken, alpha, mix) work in sRGB, HSL, Display P3 and CIE LCH with the matrices of CSS Color 4, and match colorjs.io, which Tokens Studio's sd-transforms uses. Tokens without a DTCG type (`composition`, `asset`, `boolean`, `text`, `textCase`, `textDecoration`, `other`) are left out and reported, and kept for the export.
 
 Styles: [`styles/design-token.css`](./styles/design-token.css), themed with `--dtf-*` custom properties and `:root.theme--light`.
 

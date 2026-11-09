@@ -104,7 +104,24 @@
 
       <div class="demo-layout">
         <section class="demo-panel demo-editor">
-          <h2>DTCG 2025.10 JSON</h2>
+          <div class="demo-editor-head">
+            <h2>DTCG 2025.10 JSON</h2>
+            <button type="button" id="load-file" class="demo-link">
+              Load a file
+            </button>
+            <input
+              id="file"
+              type="file"
+              accept=".json,application/json"
+              aria-label="Token file"
+              hidden
+            />
+          </div>
+          <p class="demo-muted demo-file-hint">
+            Or drop a token file on the editor. It is read in your browser and
+            never uploaded.
+          </p>
+          <p id="file-status" class="demo-file-status" role="status"></p>
           <!-- The highlighted copy sits under the textarea, which shows the caret -->
           <div class="demo-source">
             <div class="demo-source-code" aria-hidden="true"></div>

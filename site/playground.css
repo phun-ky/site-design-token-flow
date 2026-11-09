@@ -323,6 +323,15 @@ select:hover {
   letter-spacing: 0;
 }
 
+/* Under the editor, once you have tokens of your own */
+.demo-flow:not([hidden]) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  margin: 0.75rem 0 0;
+  font-size: 12px;
+}
+
 /* Only in one column, where the details are below the pills */
 .demo-back {
   display: none;

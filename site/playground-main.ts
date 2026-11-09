@@ -7,6 +7,13 @@ import { loadFonts } from '../src/app/fonts';
 import { formatHtml } from '../src/app/format-html';
 import { mountHeader } from '../src/app/header';
 import type { Colorize } from '../src/app/highlight';
+import {
+  browserStorage,
+  chooseFlowTokens,
+  readSaved,
+  writeSaved,
+  type Preset
+} from '../src/app/saved-tokens';
 import bundledTokens from '../src/assets/data/design-tokens.tokens.json';
 import {
   createDesignTokenElement,
@@ -22,13 +29,10 @@ import {
 
 import showcaseTokens from './showcase.tokens.json';
 
-type Preset = 'showcase' | 'bundled' | 'custom';
-
 const PRESETS: Record<Exclude<Preset, 'custom'>, unknown> = {
   showcase: showcaseTokens,
   bundled: bundledTokens
 };
-const STORAGE_KEY = 'dtf-demo';
 const $ = <T extends HTMLElement>(selector: string) =>
   document.querySelector(selector) as T;
 const sourceEl = $<HTMLTextAreaElement>('#source');
@@ -38,6 +42,8 @@ const presetEl = $<HTMLSelectElement>('#preset');
 const prefixEl = $<HTMLInputElement>('#prefix');
 const filterEl = $<HTMLInputElement>('#filter');
 const errorEl = $<HTMLDivElement>('#error');
+const flowLinkEl = $<HTMLParagraphElement>('#to-flow');
+const flowHintEl = $<HTMLSpanElement>('#to-flow-hint');
 const groupsEl = $<HTMLDivElement>('#groups');
 const countEl = $<HTMLSpanElement>('#count');
 const detailsEl = $<HTMLElement>('#details');
@@ -59,26 +65,9 @@ document.fonts.addEventListener('loadingdone', () => fitWrappedValues(listEl));
 let tokens: FlatDesignToken[] = [];
 let selectedId: string | null = null;
 
-// Per-viewer convenience only: remember the preset and the last edited JSON
-const storage = {
-  read(): { preset?: Preset; custom?: string } {
-    try {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
-    } catch {
-      return {};
-    }
-  },
-  write(patch: Record<string, string>) {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ ...storage.read(), ...patch })
-      );
-    } catch {
-      /* storage unavailable */
-    }
-  }
-};
+// Per-viewer convenience only: the preset and the JSON you edit stay in this
+// browser, and the flow view shows your tokens from there
+const store = browserStorage();
 const escape = (value: string) =>
   value.replace(/[&<>"]/g, (char) => `&#${char.charCodeAt(0)};`);
 
@@ -161,6 +150,15 @@ const parse = () => {
     // files from the site itself
     loadFonts(getFontFaces(tokens));
     showProblems(result.problems.map(({ message }) => message));
+
+    // Your edits without problems: the version the flow view falls back to
+    // while you fix a later one
+    if (
+      result.problems.length === 0 &&
+      tokens.length > 0 &&
+      readSaved(store).custom === sourceEl.value
+    )
+      writeSaved(store, { valid: sourceEl.value });
   } catch (error) {
     // Not JSON
     tokens = [];
@@ -168,6 +166,14 @@ const parse = () => {
   }
 
   render();
+  showFlowLink();
+};
+// "Show in the flow", once you have tokens of your own without problems
+const showFlowLink = () => {
+  const flow = chooseFlowTokens(store, false);
+
+  flowLinkEl.hidden = flow.kind !== 'yours';
+  flowHintEl.hidden = flow.kind !== 'yours' || flow.latest;
 };
 const render = () => {
   const query = filterEl.value.trim().toLowerCase();
@@ -317,14 +323,14 @@ const select = (id: string | null) => {
   });
 };
 const loadPreset = (preset: Preset) => {
-  const saved = storage.read();
+  const saved = readSaved(store);
 
   sourceEl.value =
     preset === 'custom'
       ? (saved.custom ?? JSON.stringify(PRESETS.showcase, null, 2))
       : JSON.stringify(PRESETS[preset], null, 2);
   presetEl.value = preset;
-  storage.write({ preset });
+  writeSaved(store, { preset });
   parse();
   updateSource();
 };
@@ -334,7 +340,7 @@ let parseTimer: number | undefined;
 sourceEl.addEventListener('input', () => {
   updateSource();
   presetEl.value = 'custom';
-  storage.write({ preset: 'custom', custom: sourceEl.value });
+  writeSaved(store, { preset: 'custom', custom: sourceEl.value });
   window.clearTimeout(parseTimer);
   parseTimer = window.setTimeout(parse, 250);
 });
@@ -414,7 +420,7 @@ groupsEl.addEventListener('mouseleave', () => {
 });
 
 mountHeader();
-loadPreset(storage.read().preset ?? 'showcase');
+loadPreset(readSaved(store).preset ?? 'showcase');
 
 // Shiki loads after the page, in its own chunk; the page works without it
 import('../src/app/highlight')

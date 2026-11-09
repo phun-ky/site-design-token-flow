@@ -7,11 +7,19 @@
   --demo-muted: var(--app-text-muted);
   --demo-accent: var(--app-brand);
   --demo-error: #ff8f7a;
+  --demo-error-bg: rgba(255, 143, 122, 0.08);
+  --demo-ok: #7fd1b9;
+  --demo-on-accent: #1b1b1f;
+  --demo-backdrop: rgba(0, 0, 0, 0.6);
   --demo-code-bg: #262831;
 }
 
 :root.theme--light {
   --demo-error: #bb320c;
+  --demo-error-bg: rgba(187, 50, 12, 0.06);
+  --demo-ok: #2f7d4f;
+  --demo-on-accent: #fff;
+  --demo-backdrop: rgba(27, 27, 31, 0.45);
   --demo-code-bg: #f4f6fa;
 }
 
@@ -32,7 +40,6 @@ h3 {
 
 h1 {
   font-size: 1.125rem;
-  margin-right: auto;
 }
 
 h2 {
@@ -55,7 +62,7 @@ h3 code {
   letter-spacing: 0;
 }
 
-/* Holds the toolbar and the panels, and fills the rest of the window */
+/* Holds the sidebar and the panels, and fills the rest of the window */
 .demo-main {
   display: flex;
   flex-direction: column;
@@ -66,21 +73,63 @@ h3 code {
   outline: none;
 }
 
-.demo-header {
+/* Where the tokens come from: the source, a file, the prefix, the problems
+   and the way to the flow (#110) */
+.demo-sidebar {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem 1rem;
-  padding: 0.75rem 1rem;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-height: 0;
+  padding: 1.25rem;
+  overflow: auto;
+  border-right: 1px solid var(--demo-border);
   background: var(--demo-panel);
-  border-bottom: 1px solid var(--demo-border);
+}
+
+.demo-label {
+  margin: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--demo-muted);
+}
+
+.demo-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.demo-sources legend {
+  margin-bottom: 0.5rem;
+}
+.demo-source-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.demo-source-option:has(input:checked) {
+  background: var(--app-hover);
+}
+.demo-source-option input {
+  margin: 0.2rem 0 0;
+  accent-color: var(--demo-accent);
+}
+.demo-source-option .demo-muted {
+  display: block;
+  font-size: 0.75rem;
 }
 
 .demo-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--demo-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
 }
 
 /* A field's explanation, next to it and announced with it */
@@ -91,6 +140,225 @@ h3 code {
 
 .demo-hint code {
   font-family: var(--dtf-font-family-code);
+}
+
+/* Buttons: outlined, and the main action of a place filled */
+.demo-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.25rem;
+  padding: 0 0.875rem;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--demo-bg);
+  color: var(--demo-text);
+  font: inherit;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+}
+.demo-button:hover {
+  border-color: var(--demo-accent);
+}
+.demo-button-primary {
+  border-color: var(--demo-accent);
+  background: var(--demo-accent);
+  color: var(--demo-on-accent);
+  font-weight: 600;
+}
+.demo-button-primary:hover {
+  filter: brightness(1.08);
+}
+.demo-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--demo-text);
+  cursor: pointer;
+}
+.demo-icon-button:hover {
+  background: var(--app-hover);
+}
+
+/* The drop zone; the whole playground takes a dropped file */
+.demo-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1.125rem 0.875rem;
+  border: 1.5px dashed var(--app-border);
+  border-radius: 12px;
+  text-align: center;
+}
+.demo-drop.is-dropping {
+  border: 2px solid var(--demo-accent);
+  background: var(--app-hover);
+}
+.demo-drop-icon {
+  color: var(--demo-accent);
+}
+.demo-drop-title {
+  margin: 0;
+  font-weight: 600;
+}
+.demo-drop-hint {
+  margin: 0;
+  font-size: 0.75rem;
+}
+
+/* What happened to a file, or how far loading it has come */
+.demo-file-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  font-size: 0.8125rem;
+}
+.demo-file-status:empty {
+  display: none;
+}
+.demo-file-status p {
+  margin: 0;
+}
+.demo-file-status.is-busy {
+  padding: 0.875rem;
+  border: 1px solid var(--demo-border);
+  border-radius: 12px;
+}
+.demo-file-status.is-refused {
+  color: var(--demo-error);
+}
+.demo-file-status progress {
+  width: 100%;
+  height: 4px;
+  accent-color: var(--demo-accent);
+}
+.demo-file-status .demo-button {
+  align-self: flex-start;
+  min-height: 2rem;
+}
+.demo-steps {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.demo-steps li {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+.demo-steps li::before {
+  content: '';
+  flex: none;
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 2px solid var(--app-border);
+  border-radius: 50%;
+}
+.demo-steps .is-done::before {
+  border-color: var(--demo-ok);
+  background: var(--demo-ok);
+}
+.demo-steps .is-current {
+  font-weight: 600;
+}
+.demo-steps .is-current::before {
+  border-color: var(--app-border);
+  border-top-color: var(--demo-accent);
+  animation: demo-spin 0.8s linear infinite;
+}
+.demo-steps .is-todo {
+  color: var(--demo-muted);
+}
+
+/* The problems: each moves the editor to its line */
+.demo-problems:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.demo-problems .demo-label {
+  color: var(--demo-error);
+}
+.demo-problems ul {
+  display: grid;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.75rem;
+}
+.demo-problem {
+  display: grid;
+  gap: 0.125rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border: 0;
+  border-radius: 8px;
+  background: var(--demo-error-bg);
+  color: var(--demo-text);
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.demo-problem:hover {
+  outline: 1px solid var(--demo-error);
+}
+.demo-problem-line {
+  color: var(--demo-error);
+  font-family: var(--dtf-font-family-code);
+}
+
+/* Shows after 300 ms, so quick work doesn't flicker */
+.demo-busy:not(:empty) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.125rem 0.625rem;
+  border-radius: 999px;
+  background: var(--app-hover);
+  font-size: 0.75rem;
+  font-weight: 600;
+  animation: demo-appear 1ms 300ms both;
+}
+.demo-busy:not(:empty)::before {
+  content: '';
+  width: 0.625rem;
+  height: 0.625rem;
+  border: 2px solid var(--app-border);
+  border-top-color: var(--demo-accent);
+  border-radius: 50%;
+  animation: demo-spin 0.8s linear infinite;
+}
+/* Opacity, which the compositor animates even while the page is busy */
+@keyframes demo-appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes demo-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .demo-busy:not(:empty)::before,
+  .demo-steps .is-current::before {
+    animation: none;
+  }
 }
 
 select,
@@ -108,22 +376,52 @@ select:hover {
   border-color: var(--demo-accent);
 }
 
+/* Sidebar, editor and pills; the details join as a fourth column when a
+   pill is selected, so they never cover a pill */
 .demo-layout {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(0, 2fr) minmax(260px, 1fr);
-  gap: 1rem;
+  grid-template-columns: 280px minmax(260px, 1fr) minmax(0, 1.5fr);
   flex: 1;
   min-height: 0;
-  padding: 1rem;
+}
+/* With the details, the sidebar and editor give way, so at 1280 px the
+   editor keeps 260 px and the widest pill (28rem) still fits its column */
+.has-details .demo-layout {
+  grid-template-columns:
+    240px minmax(260px, 0.8fr) minmax(0, 1.6fr)
+    minmax(300px, 0.9fr);
 }
 
 .demo-panel {
-  background: var(--demo-panel);
-  border: 1px solid var(--demo-border);
-  border-radius: 12px;
-  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   min-height: 0;
+  padding: 1rem;
   overflow: auto;
+  border-right: 1px solid var(--demo-border);
+}
+.demo-output {
+  background-image: radial-gradient(var(--app-dot) 1px, transparent 0);
+  background-size: 20px 20px;
+}
+
+.demo-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.demo-panel-head h2 {
+  margin: 0 auto 0 0;
+}
+.demo-panel-head input {
+  min-width: 0;
+  flex: 0 1 240px;
+}
+.demo-panel-head .demo-muted {
+  font-size: 0.75rem;
 }
 
 .demo-editor {
@@ -188,42 +486,6 @@ select:hover {
 .demo-source:not(.is-highlighted) .demo-source-code,
 .demo-source.is-stale .demo-source-code {
   visibility: hidden;
-}
-
-.demo-error {
-  margin: 0.75rem 0 0;
-  padding: 0.5rem 0.75rem;
-  border-radius: 6px;
-  border: 1px solid var(--demo-error);
-  color: var(--demo-error);
-  font-family: var(--dtf-font-family-code);
-  font-size: 12px;
-  white-space: pre-wrap;
-}
-.demo-error-summary {
-  margin: 0;
-  font-family: var(--dtf-font-family);
-  font-weight: 600;
-}
-.demo-error ul {
-  display: grid;
-  gap: 0.25rem;
-  margin: 0.25rem 0 0;
-  padding-left: 1.25rem;
-}
-
-.demo-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.demo-toolbar input {
-  min-width: 0;
-  flex: 0 1 240px;
 }
 
 .demo-muted {
@@ -323,46 +585,101 @@ select:hover {
   letter-spacing: 0;
 }
 
-/* The editor's heading, with "Load a file" next to it */
-.demo-editor-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.25rem 1rem;
-}
-.demo-file-hint,
-.demo-file-status {
-  margin: 0 0 0.5rem;
-  font-size: 12px;
-}
-.demo-file-status:empty {
-  display: none;
-}
-.demo-file-status .demo-link {
-  margin-left: 0.5rem;
-}
-.demo-file-status.is-refused {
-  color: var(--demo-error);
-}
-/* A file dragged over the editor */
-.demo-source.is-dropping {
-  outline: 2px dashed var(--demo-accent);
-  outline-offset: 2px;
-}
-
-/* Under the editor, once you have tokens of your own */
+/* Under the sidebar: the way to the flow */
 .demo-flow:not([hidden]) {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 0.75rem;
-  margin: 0.75rem 0 0;
-  font-size: 12px;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin: auto 0 0;
+  font-size: 0.75rem;
+  text-align: center;
 }
 
-/* Only in one column, where the details are below the pills */
-.demo-back {
+/* The details of the selected pill */
+.demo-details {
+  border-right: 0;
+  border-left: 1px solid var(--demo-border);
+  background: var(--demo-panel);
+}
+.demo-details[hidden] {
   display: none;
+}
+.demo-details-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.demo-details-head h2 {
+  margin: 0;
+  font-family: var(--dtf-font-family-code);
+  overflow-wrap: anywhere;
+}
+.demo-details-head .demo-icon-button {
+  margin-left: auto;
+  flex: none;
+}
+
+/* Asks before a file replaces your edits (#108) */
+.demo-dialog {
+  width: min(32rem, calc(100vw - 2rem));
+  padding: 1.5rem;
+  border: 1px solid var(--demo-border);
+  border-radius: 14px;
+  background: var(--demo-panel);
+  color: var(--demo-text);
+  box-shadow: var(--app-shadow);
+}
+.demo-dialog::backdrop {
+  background: var(--demo-backdrop);
+}
+.demo-dialog form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
+}
+.demo-dialog h2 {
+  margin: 0;
+  font-size: 1.125rem;
+}
+.demo-dialog p {
+  margin: 0;
+}
+.demo-compare {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--demo-muted);
+}
+.demo-compare-side {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  border: 1px solid var(--demo-border);
+  border-radius: 10px;
+  color: var(--demo-text);
+  font-size: 0.8125rem;
+}
+.demo-compare-side.is-file {
+  border-color: var(--demo-accent);
+}
+.demo-compare-side strong {
+  font-size: 0.875rem;
+}
+.demo-compare-side code {
+  font-family: var(--dtf-font-family-code);
+  color: var(--demo-muted);
+  overflow-wrap: anywhere;
+}
+.demo-compare-side .is-bad {
+  color: var(--demo-error);
+}
+.demo-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 
 /* Clear of the fixed header when a selection scrolls to them */
@@ -380,17 +697,20 @@ select:hover {
     height: auto;
   }
 
-  .demo-back {
-    display: inline-block;
-    margin-bottom: 0.5rem;
-  }
-
-  .demo-layout {
+  /* One column: the sidebar, the editor and the pills, one under the other */
+  .demo-layout,
+  .has-details .demo-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  /* One column: a fixed height that scrolls, so a long file doesn't push the
-     pills thousands of pixels down */
+  .demo-sidebar,
+  .demo-panel {
+    border-right: 0;
+    border-bottom: 1px solid var(--demo-border);
+  }
+
+  /* A fixed height that scrolls, so a long file doesn't push the pills
+     thousands of pixels down */
   .demo-source {
     flex: none;
     grid-template-rows: minmax(0, 1fr);
@@ -401,6 +721,15 @@ select:hover {
   .demo-panel {
     overflow: visible;
     overflow-x: auto;
+  }
+
+  /* The details cover the page under the header, with their own scroll */
+  .demo-details {
+    position: fixed;
+    z-index: 40;
+    inset: var(--app-header-height) 0 0;
+    overflow: auto;
+    border: 0;
   }
 }
 

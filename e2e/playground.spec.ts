@@ -10,7 +10,8 @@ test.beforeEach(async ({ page }) => {
 const pills = '#groups .design-token';
 
 test('shows the showcase tokens, highlighted', async ({ page }) => {
-  await expect(page.locator('h1')).toHaveText('Token pill playground');
+  await expect(page.locator('h1')).toHaveText('Playground');
+  await expect(page.getByLabel('Showcase')).toBeChecked();
   await expect(page.locator(pills)).toHaveCount(42);
   await expect(page.locator('.demo-source')).toHaveClass(/is-highlighted/);
 });
@@ -64,8 +65,11 @@ test('filters, switches to the bundled tokens and reports invalid JSON', async (
   await expect(page.locator(pills)).toHaveCount(2);
   await page.locator('#filter').fill('');
 
-  await page.locator('#preset').selectOption('bundled');
+  await page.getByLabel('Example file').check();
   await expect(page.locator(pills)).toHaveCount(201);
+  await expect(
+    page.locator('label', { hasText: 'Example file' })
+  ).toContainText('201 tokens');
 
   await page.locator('#source').fill(
     JSON.stringify({
@@ -105,14 +109,16 @@ test('lists every problem in the tokens, and shows the valid ones', async ({
   await expect(page.locator('#error [role="alert"]')).toHaveText(
     '2 problems in the tokens'
   );
+  // Each with its line, which a click moves the editor to
   await expect(problems).toHaveText([
-    'Unresolvable reference "{color.blu}" in "color.accent"',
-    'Invalid token "size.r" (dimension): $value.value must be a number, got "1px"'
+    'Line 1Unresolvable reference "{color.blu}" in "color.accent"',
+    'Line 1Invalid token "size.r" (dimension): $value.value must be a number, got "1px"'
   ]);
   await expect(page.locator(pills)).toHaveCount(1);
 
   await page.locator('#source').fill('{ "color": ');
   await expect(problems).toHaveCount(1);
+  await expect(page.locator('#to-flow')).toBeHidden();
   await expect(page.locator('#error [role="alert"]')).toHaveText(
     '1 problem in the tokens'
   );
@@ -130,17 +136,18 @@ test('keeps the editor to part of the screen on a phone', async ({ page }) => {
     return {
       editor: editor.getBoundingClientRect().height,
       scrolls: editor.scrollHeight > editor.clientHeight,
+      // From the editor: the sidebar comes first on a phone
       firstPill:
         (
           document.querySelector('#groups .design-token') as HTMLElement
-        ).getBoundingClientRect().top + window.scrollY
+        ).getBoundingClientRect().top - editor.getBoundingClientRect().top
     };
   });
 
   // The showcase is far longer than the editor, which scrolls instead
   expect(layout.editor).toBeLessThanOrEqual(844 * 0.6);
   expect(layout.scrolls).toBe(true);
-  expect(layout.firstPill).toBeLessThan(844 * 1.5);
+  expect(layout.firstPill).toBeLessThan(844);
 });
 
 test('shows the details after a selection on a phone, and goes back', async ({
@@ -158,18 +165,75 @@ test('shows the details after a selection on a phone, and goes back', async ({
   await expect(page.locator('#details h2')).toBeFocused();
   await expect(page.locator('#details h2')).toBeInViewport();
 
-  await page.getByRole('button', { name: 'Back to the pill' }).click();
+  // The details cover the page; closing them returns to the pill
+  await page.getByRole('button', { name: 'Close the details' }).click();
+  await expect(page.locator('#details')).toBeHidden();
   await expect(pill).toBeFocused();
   await expect(pill).toBeInViewport();
+
+  // Esc closes them too
+  await pill.press('Enter');
+  await expect(page.locator('#details h2')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#details')).toBeHidden();
+  await expect(pill).toBeFocused();
 });
 
-test('keeps the details in place next to the pills on a wide screen', async ({
+test('shows the details next to the pills on a wide screen, covering none', async ({
   page
 }) => {
-  await page.locator('[data-demo-id="shadow-raised"]').click();
+  await expect(page.locator('#details')).toBeHidden();
+
+  const pill = page.locator('[data-demo-id="shadow-raised"]');
+
+  await pill.click();
   await expect(page.locator('#details h2')).toHaveText('shadow.raised');
-  await expect(
-    page.getByRole('button', { name: 'Back to the pill' })
-  ).toBeHidden();
+  // A column of their own: the pills are all still in view, none under them
+  await expect(pill).toBeInViewport();
+
+  const overlap = await page.evaluate(() => {
+    const details = (
+      document.querySelector('#details') as HTMLElement
+    ).getBoundingClientRect();
+
+    return [...document.querySelectorAll('#groups .design-token')].some(
+      (element) => {
+        const box = element.getBoundingClientRect();
+
+        return box.right > details.left && box.left < details.right;
+      }
+    );
+  });
+
+  expect(overlap, 'a pill under the details').toBe(false);
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+  await page.getByRole('button', { name: 'Close the details' }).click();
+  await expect(page.locator('#details')).toBeHidden();
+});
+
+test('moves the editor to the line of a problem', async ({ page }) => {
+  await page.locator('#source').fill(
+    JSON.stringify(
+      {
+        color: {
+          $type: 'color',
+          blue: { $value: { colorSpace: 'srgb', components: [0, 0.33, 0.94] } },
+          cta: { $value: '{color.nope}' }
+        }
+      },
+      null,
+      2
+    )
+  );
+  await page.locator('#error li button').click();
+  await expect(page.locator('#source')).toBeFocused();
+
+  const selected = await page
+    .locator('#source')
+    .evaluate((element: HTMLTextAreaElement) =>
+      element.value.slice(element.selectionStart, element.selectionEnd)
+    );
+
+  expect(selected).toBe('    "cta": {');
 });

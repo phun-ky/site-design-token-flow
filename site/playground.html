@@ -76,37 +76,54 @@
   </head>
   <body>
     <main class="demo-main" id="content" tabindex="-1">
-      <div class="demo-header">
-        <h1>Token pill playground</h1>
-        <label class="demo-field">
-          <span>Tokens</span>
-          <select id="preset">
-            <option value="showcase">Showcase (every $type)</option>
-            <option value="bundled">Bundled design-tokens.tokens.json</option>
-            <option value="custom">Custom (your edits)</option>
-          </select>
-        </label>
-        <label class="demo-field">
-          <span>Prefix</span>
-          <input
-            id="prefix"
-            type="text"
-            value="$"
-            size="3"
-            aria-describedby="prefix-hint"
-          />
-        </label>
-        <span id="prefix-hint" class="demo-hint">
-          Shown before each token name, like <code>$</code> in
-          <code>$color-cta</code>
-        </span>
-      </div>
-
       <div class="demo-layout">
-        <section class="demo-panel demo-editor">
-          <div class="demo-editor-head">
-            <h2>DTCG 2025.10 JSON</h2>
-            <button type="button" id="load-file" class="demo-link">
+        <aside class="demo-sidebar" aria-labelledby="playground-title">
+          <h1 id="playground-title">Playground</h1>
+
+          <fieldset class="demo-sources">
+            <legend class="demo-label">Start from</legend>
+            <label class="demo-source-option">
+              <input type="radio" name="preset" value="showcase" />
+              <span>
+                Showcase
+                <span class="demo-muted">One token of every $type</span>
+              </span>
+            </label>
+            <label class="demo-source-option">
+              <input type="radio" name="preset" value="bundled" />
+              <span>
+                Example file
+                <span class="demo-muted" id="bundled-count"></span>
+              </span>
+            </label>
+            <label class="demo-source-option">
+              <input type="radio" name="preset" value="custom" />
+              <span>
+                Your tokens
+                <span class="demo-muted" id="custom-count"></span>
+              </span>
+            </label>
+          </fieldset>
+
+          <div class="demo-drop" id="drop">
+            <svg
+              class="demo-drop-icon"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 15V3" />
+              <path d="m7 8 5-5 5 5" />
+              <path d="M20 15v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4" />
+            </svg>
+            <p class="demo-drop-title">Drop a token file here</p>
+            <button type="button" id="load-file" class="demo-button">
               Load a file
             </button>
             <input
@@ -116,12 +133,55 @@
               aria-label="Token file"
               hidden
             />
+            <p class="demo-muted demo-drop-hint">
+              JSON up to 2 MB, read in your browser and never uploaded
+            </p>
           </div>
-          <p class="demo-muted demo-file-hint">
-            Or drop a token file on the editor. It is read in your browser and
-            never uploaded.
+          <div id="file-status" class="demo-file-status" role="status"></div>
+
+          <label class="demo-field" for="prefix">
+            <span class="demo-label">Prefix</span>
+            <input
+              id="prefix"
+              type="text"
+              value="$"
+              size="3"
+              aria-describedby="prefix-hint"
+            />
+            <span id="prefix-hint" class="demo-hint">
+              Shown before each token name, like <code>$</code> in
+              <code>$color-cta</code>
+            </span>
+          </label>
+
+          <section
+            id="error"
+            class="demo-problems"
+            aria-labelledby="problems-title"
+            hidden
+          >
+            <h2 class="demo-label">
+              <span id="problems-title" role="alert"></span>
+            </h2>
+            <ul></ul>
+          </section>
+
+          <p id="to-flow" class="demo-flow" hidden>
+            <a class="demo-button demo-button-primary" href="./">
+              Show in the flow
+            </a>
+            <span id="to-flow-hint" class="demo-muted" hidden>
+              The flow shows your last version without problems
+            </span>
           </p>
-          <p id="file-status" class="demo-file-status" role="status"></p>
+        </aside>
+
+        <section class="demo-panel demo-editor" aria-labelledby="json-title">
+          <div class="demo-panel-head">
+            <h2 id="json-title">Token JSON</h2>
+            <span id="saved" class="demo-muted"></span>
+            <span id="checking" class="demo-busy" role="status"></span>
+          </div>
           <!-- The highlighted copy sits under the textarea, which shows the caret -->
           <div class="demo-source">
             <div class="demo-source-code" aria-hidden="true"></div>
@@ -131,18 +191,13 @@
               aria-label="Design tokens JSON"
             ></textarea>
           </div>
-          <div id="error" class="demo-error" hidden></div>
-          <p id="to-flow" class="demo-flow" hidden>
-            <a class="demo-link" href="./">Show your tokens in the flow</a>
-            <span id="to-flow-hint" class="demo-muted" hidden>
-              The flow shows your last version without problems.
-            </span>
-          </p>
         </section>
 
-        <section class="demo-panel demo-output">
-          <div class="demo-toolbar">
-            <h2>Rendered pills <span id="count" class="demo-muted"></span></h2>
+        <section class="demo-panel demo-output" aria-labelledby="pills-title">
+          <div class="demo-panel-head">
+            <h2 id="pills-title">
+              Pills <span id="count" class="demo-muted"></span>
+            </h2>
             <input
               id="filter"
               type="search"
@@ -153,15 +208,58 @@
           <div id="groups"></div>
         </section>
 
-        <aside class="demo-panel demo-details" id="details">
-          <h2>Details</h2>
-          <p class="demo-muted">
-            Select a pill to see its token, resolved value, relations and
-            generated HTML.
-          </p>
-        </aside>
+        <aside
+          class="demo-panel demo-details"
+          id="details"
+          aria-label="Details"
+          hidden
+        ></aside>
       </div>
     </main>
+
+    <dialog id="replace" class="demo-dialog" aria-labelledby="replace-title">
+      <form method="dialog">
+        <h2 id="replace-title">Replace your edits with this file?</h2>
+        <div class="demo-compare">
+          <div class="demo-compare-side">
+            <span class="demo-muted">Your edits</span>
+            <strong id="replace-yours-count"></strong>
+            <span id="replace-yours-problems"></span>
+          </div>
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <path d="M19 12H5" />
+            <path d="m11 6-6 6 6 6" />
+          </svg>
+          <div class="demo-compare-side is-file">
+            <code id="replace-file-name"></code>
+            <strong id="replace-file-count"></strong>
+            <span id="replace-file-problems"></span>
+          </div>
+        </div>
+        <p>Your edits can’t be brought back after this.</p>
+        <div class="demo-dialog-actions">
+          <button type="submit" value="keep" class="demo-button" autofocus>
+            Keep my edits
+          </button>
+          <button
+            type="submit"
+            value="replace"
+            class="demo-button demo-button-primary"
+          >
+            Replace with the file
+          </button>
+        </div>
+      </form>
+    </dialog>
 
     <script type="module" src="./playground-main.ts"></script>
   </body>

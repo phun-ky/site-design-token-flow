@@ -172,7 +172,8 @@ describe('chooseFlowTokens', () => {
     });
     assert.deepEqual(chooseFlowTokens(memory({ custom: VALID }), true), {
       kind: 'example',
-      reason: 'chosen'
+      reason: 'chosen',
+      yours: 2
     });
   });
 });
@@ -183,43 +184,90 @@ describe('describeFlowSource', () => {
     memory({ custom: BROKEN, valid: VALID }),
     false
   );
+  const example = (current: boolean) => ({
+    label: 'The example',
+    detail: '201 tokens',
+    href: './?tokens=example',
+    current
+  });
 
-  it('names whose tokens are shown, with links to change it', () => {
-    assert.deepEqual(describeFlowSource(yours), {
-      text: 'Showing your tokens from the playground: 2 tokens.',
-      links: [
-        { label: 'Edit them in the playground', href: './playground' },
-        { label: 'Show the example', href: './?tokens=example' }
-      ]
+  it('offers your tokens and the example, with the shown one current', () => {
+    assert.deepEqual(describeFlowSource(yours, 201), {
+      options: [
+        {
+          label: 'Your tokens',
+          detail: '2 tokens, saved in this browser',
+          href: './',
+          current: true
+        },
+        example(false)
+      ],
+      note: null,
+      links: [{ label: 'Edit them in the playground', href: './playground' }]
     });
+    assert.deepEqual(
+      describeFlowSource({ kind: 'example', reason: 'chosen', yours: 2 }, 201)
+        .options,
+      [
+        {
+          label: 'Your tokens',
+          detail: '2 tokens, saved in this browser',
+          href: './',
+          current: false
+        },
+        example(true)
+      ]
+    );
+  });
+
+  it('says when the flow shows an earlier version of your tokens', () => {
+    const source = describeFlowSource(earlier, 201);
+
     assert.match(
-      describeFlowSource(earlier).text,
-      /^Showing the last version of your tokens without problems: 2 tokens\. Your latest edits/
+      source.note ?? '',
+      /^Showing the last version of your tokens without problems/
     );
-    assert.deepEqual(
-      describeFlowSource({ kind: 'example', reason: 'chosen' }).links,
-      [{ label: 'Show your tokens', href: './' }]
+    assert.deepEqual(source.links, [
+      { label: 'Fix them in the playground', href: './playground' }
+    ]);
+  });
+
+  it('offers only the example, and says why, when you have no tokens to show', () => {
+    const none = describeFlowSource({ kind: 'example', reason: 'none' }, 201);
+    const problems = describeFlowSource(
+      { kind: 'example', reason: 'problems' },
+      201
     );
-    assert.deepEqual(
-      describeFlowSource({ kind: 'example', reason: 'none' }).links,
-      [{ label: 'Try your own in the playground', href: './playground' }]
+    const blocked = describeFlowSource(
+      { kind: 'example', reason: 'blocked' },
+      201
     );
-    assert.deepEqual(
-      describeFlowSource({ kind: 'example', reason: 'problems' }).links,
-      [{ label: 'Fix them in the playground', href: './playground' }]
-    );
-    assert.match(
-      describeFlowSource({ kind: 'example', reason: 'blocked' }).text,
-      /blocks storage/
-    );
+
+    for (const source of [none, problems, blocked])
+      assert.deepEqual(source.options, [example(true)]);
+
+    assert.equal(none.note, 'You have no tokens of your own yet.');
+    assert.deepEqual(none.links, [
+      { label: 'Try your own in the playground', href: './playground' }
+    ]);
+    assert.deepEqual(problems.links, [
+      { label: 'Fix them in the playground', href: './playground' }
+    ]);
+    assert.match(blocked.note ?? '', /blocks storage/);
+    assert.deepEqual(blocked.links, []);
   });
 
   it('counts one token as one', () => {
     const one = chooseFlowTokens(memory({ custom: OTHER }), false);
 
     assert.equal(
-      describeFlowSource(one).text,
-      'Showing your tokens from the playground: 1 token.'
+      describeFlowSource(one, 1).options[0].detail,
+      '1 token, saved in this browser'
+    );
+    assert.equal(
+      describeFlowSource({ kind: 'example', reason: 'chosen' }, 1).options[0]
+        .detail,
+      '0 tokens, saved in this browser'
     );
   });
 });

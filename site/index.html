@@ -73,16 +73,49 @@
   </head>
   <body>
     <main class="app-main">
-      <div class="app-page-header">
-        <h1>Token flow</h1>
-        <p class="app-page-intro">
-          Each pill is a design token, and each line joins an alias to the token
-          it references, ending at the values on the right. Drag or scroll to
-          move; zoom with the buttons, Ctrl or Cmd and the wheel, or a trackpad
-          pinch.
-        </p>
-        <p id="tokens-source" class="app-tokens-source" hidden></p>
-      </div>
+      <aside class="app-sidebar" id="flow-sidebar" aria-labelledby="flow-title">
+        <div class="app-sidebar-bar">
+          <h1 id="flow-title">Token flow</h1>
+          <button
+            type="button"
+            class="app-sidebar-toggle"
+            aria-expanded="false"
+            aria-controls="flow-sidebar-body"
+          >
+            About this flow
+          </button>
+        </div>
+        <p id="flow-status" class="app-busy" role="status"></p>
+        <div class="app-sidebar-body" id="flow-sidebar-body">
+          <nav class="app-showing" aria-labelledby="showing-title">
+            <h2 id="showing-title" class="app-label">Showing</h2>
+            <ul id="tokens-showing"></ul>
+          </nav>
+          <p id="tokens-source" class="app-tokens-source" hidden></p>
+          <section aria-labelledby="reading-title">
+            <h2 id="reading-title" class="app-label">Reading the flow</h2>
+            <p>
+              Each pill is a design token, and each line joins an alias to the
+              token it references, ending at the values on the right.
+            </p>
+          </section>
+          <section aria-labelledby="moving-title">
+            <h2 id="moving-title" class="app-label">Moving around</h2>
+            <dl class="app-keys">
+              <dt>Move</dt>
+              <dd>Drag, scroll, or the arrow keys</dd>
+              <dt>Zoom</dt>
+              <dd>Ctrl or Cmd and the wheel, or a trackpad pinch</dd>
+              <dt>Steps</dt>
+              <dd><kbd>+</kbd> and <kbd>-</kbd></dd>
+              <dt>100%</dt>
+              <dd><kbd>0</kbd>, the page width</dd>
+              <dt>Fit</dt>
+              <dd><kbd>F</kbd>, the whole flow on the screen</dd>
+            </dl>
+          </section>
+        </div>
+      </aside>
       <!-- The canvas: one Tab stop, the skip link's target, see src/app/zoom.ts -->
       <section
         class="app-viewport"

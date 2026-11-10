@@ -63,6 +63,51 @@ export const stepScale = (scale: number, direction: 1 | -1): number => {
         MIN_SCALE);
 };
 
+/**
+ * The state for a two finger pinch: the scale follows the change in distance
+ * between the fingers, the content under their midpoint at the start stays
+ * under their midpoint now, so moving both fingers pans. Within `MIN_SCALE` and
+ * `MAX_SCALE` times `base`, the 100% scale, as `zoomAt`.
+ *
+ * @param {ZoomState} start The state when the second finger touched
+ * @param {[Point, Point]} from Where the two fingers were then, in viewport coordinates
+ * @param {[Point, Point]} to Where they are now
+ * @param {number} [base] The 100% scale
+ * @returns {ZoomState} The state that keeps the content between the fingers
+ * @example
+ * // Spreading two fingers to twice the distance doubles the scale
+ * pinchState({ scale: 1, x: 0, y: 0 }, [{ x: 40, y: 0 }, { x: 60, y: 0 }],
+ *   [{ x: 30, y: 0 }, { x: 70, y: 0 }]).scale; // => 2
+ */
+export const pinchState = (
+  start: ZoomState,
+  from: [Point, Point],
+  to: [Point, Point],
+  base = 1
+): ZoomState => {
+  const distance = ([a, b]: [Point, Point]) => Math.hypot(b.x - a.x, b.y - a.y);
+  const middle = ([a, b]: [Point, Point]): Point => ({
+    x: (a.x + b.x) / 2,
+    y: (a.y + b.y) / 2
+  });
+  const before = distance(from);
+  const ratio = before > 0 ? distance(to) / before : 1;
+  const scale = clampScale((start.scale * ratio) / base) * base;
+  const fromMiddle = middle(from);
+  const toMiddle = middle(to);
+  // The content point that was under the fingers, in unscaled coordinates
+  const content = {
+    x: (fromMiddle.x - start.x) / start.scale,
+    y: (fromMiddle.y - start.y) / start.scale
+  };
+
+  return {
+    scale,
+    x: toMiddle.x - content.x * scale,
+    y: toMiddle.y - content.y * scale
+  };
+};
+
 /** How far a line of a line-based wheel delta pans, in pixels */
 const WHEEL_LINE = 16;
 
@@ -265,7 +310,7 @@ export interface ZoomController {
  *   too small to read, it starts at a readable scale on `start` instead
  * - the wheel pans (with Shift sideways), and Ctrl or Cmd with the wheel, or
  *   a trackpad pinch, zooms around the pointer; see `wheelAction`
- * - dragging pans
+ * - dragging pans, and two fingers pinch to zoom and pan; see `pinchState`
  * - when the viewport has focus, the keys from `canvasKeyAction` pan and zoom
  * - while the view is untouched (as loaded, or reset), it fits the width again
  *   when the content or viewport changes size, such as when fonts load or the
@@ -385,34 +430,76 @@ export const createZoom = (
     { passive: false }
   );
 
+  // Every finger, pen or mouse button down on the canvas, in viewport
+  // coordinates. One pans; two pinch to zoom and pan (#119)
+  const pointers = new Map<number, Point>();
+
   let drag: { pointerId: number; x: number; y: number } | null = null;
+  let pinch: {
+    ids: [number, number];
+    from: [Point, Point];
+    start: ZoomState;
+  } | null = null;
+
+  const local = (event: PointerEvent): Point => {
+    const rect = viewport.getBoundingClientRect();
+
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  };
+  const startDrag = (pointerId: number, point: Point) => {
+    pinch = null;
+    drag = { pointerId, x: point.x - state.x, y: point.y - state.y };
+    viewport.classList.add('is-panning');
+  };
 
   viewport.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || pointers.size >= 2) return;
 
-    drag = {
-      pointerId: event.pointerId,
-      x: event.clientX - state.x,
-      y: event.clientY - state.y
-    };
+    pointers.set(event.pointerId, local(event));
     viewport.setPointerCapture(event.pointerId);
-    viewport.classList.add('is-panning');
-  });
-  viewport.addEventListener('pointermove', (event) => {
-    if (!drag || drag.pointerId !== event.pointerId) return;
 
-    apply({ ...state, x: event.clientX - drag.x, y: event.clientY - drag.y });
-  });
+    if (pointers.size === 1) return startDrag(event.pointerId, local(event));
 
-  const endDrag = (event: PointerEvent) => {
-    if (!drag || drag.pointerId !== event.pointerId) return;
+    const [first, second] = [...pointers.entries()];
 
     drag = null;
+    pinch = {
+      ids: [first[0], second[0]],
+      from: [first[1], second[1]],
+      start: state
+    };
+  });
+  viewport.addEventListener('pointermove', (event) => {
+    if (!pointers.has(event.pointerId)) return;
+
+    const point = local(event);
+
+    pointers.set(event.pointerId, point);
+
+    if (pinch) {
+      const [a, b] = pinch.ids.map((id) => pointers.get(id) as Point);
+
+      return apply(pinchState(pinch.start, pinch.from, [a, b], base));
+    }
+
+    if (drag?.pointerId === event.pointerId)
+      apply({ ...state, x: point.x - drag.x, y: point.y - drag.y });
+  });
+
+  const endPointer = (event: PointerEvent) => {
+    if (!pointers.delete(event.pointerId)) return;
+
+    // One finger left of a pinch carries on panning from where it is
+    const [rest] = [...pointers.entries()];
+
+    if (rest) return startDrag(rest[0], rest[1]);
+
+    drag = pinch = null;
     viewport.classList.remove('is-panning');
   };
 
-  viewport.addEventListener('pointerup', endDrag);
-  viewport.addEventListener('pointercancel', endDrag);
+  viewport.addEventListener('pointerup', endPointer);
+  viewport.addEventListener('pointercancel', endPointer);
 
   // Fonts loading change the content's size, and a resized window the
   // viewport's; either changes the scale that fills the width

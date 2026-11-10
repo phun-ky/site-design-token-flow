@@ -22,6 +22,7 @@ import {
   writeSaved,
   type Preset
 } from '../src/app/saved-tokens';
+import { mountSidebarCollapse } from '../src/app/sidebar';
 import { formatBytes, refuseTokenFile } from '../src/app/token-file';
 import bundledTokens from '../src/assets/data/design-tokens.tokens.json';
 import {
@@ -942,6 +943,13 @@ groupsEl.addEventListener('mouseleave', () => {
 });
 
 mountHeader();
+// On a wide screen the sidebar collapses to a rail; the panels take the space (#120)
+mountSidebarCollapse(
+  document.querySelector(
+    '#playground-sidebar .app-sidebar-collapse'
+  ) as HTMLButtonElement,
+  'dtf-sidebar-playground'
+);
 bundledCountEl.textContent = plural(
   countTokens(JSON.stringify(bundledTokens)),
   'token'

@@ -80,6 +80,29 @@ const STATES: {
     }
   },
   {
+    name: 'flow with the sidebar collapsed',
+    path: '',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'Sidebar' }).click();
+      await expect(page.locator('#flow-sidebar')).toHaveCSS('width', '48px');
+    }
+  },
+  {
+    name: 'playground with the sidebar collapsed and problems',
+    path: 'playground',
+    prepare: async (page) => {
+      await page
+        .locator('#source')
+        .fill('{ "color": { "$type": "color", "a": { "$value": "{nope}" } } }');
+      await expect(page.locator('#error li')).toHaveCount(1);
+      await page.getByRole('button', { name: 'Sidebar' }).click();
+      await expect(page.locator('#playground-sidebar')).toHaveCSS(
+        'width',
+        '48px'
+      );
+    }
+  },
+  {
     name: 'flow with the sidebar open on a phone',
     path: '',
     prepare: async (page) => {

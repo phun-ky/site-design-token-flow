@@ -86,6 +86,80 @@ h3 code {
   background: var(--demo-panel);
 }
 
+/* The heading and, on wide screens, the button that collapses the sidebar
+   to a rail (#120); `.sidebar-collapsed` is on <html> */
+.demo-sidebar-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+@media (min-width: 1101px) {
+  .sidebar-collapsed .demo-layout {
+    grid-template-columns: 48px minmax(260px, 1fr) minmax(0, 1.5fr);
+  }
+
+  .sidebar-collapsed .has-details .demo-layout {
+    grid-template-columns:
+      48px minmax(260px, 0.8fr) minmax(0, 1.6fr)
+      minmax(300px, 0.9fr);
+  }
+
+  .sidebar-collapsed .demo-sidebar {
+    align-items: center;
+    padding: 0.75rem 0.375rem;
+    overflow: hidden;
+  }
+
+  .sidebar-collapsed
+    .demo-sidebar
+    > :not(.demo-sidebar-bar, #file-status, #error) {
+    display: none;
+  }
+
+  /* Still the page's heading, the sidebar's name, and what a file or your
+     edits did, announced as before: off screen, not gone */
+  .sidebar-collapsed .demo-sidebar h1,
+  .sidebar-collapsed .demo-sidebar #file-status,
+  .sidebar-collapsed .demo-sidebar #error {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* Problems while collapsed: a dot on the button, which the problems'
+     title describes */
+  .sidebar-collapsed
+    .demo-sidebar:has(#error:not([hidden]))
+    .app-sidebar-collapse {
+    position: relative;
+  }
+
+  .sidebar-collapsed
+    .demo-sidebar:has(#error:not([hidden]))
+    .app-sidebar-collapse::after {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 10px;
+    height: 10px;
+    border: 2px solid var(--demo-panel);
+    border-radius: 50%;
+    background: var(--demo-error);
+    content: '';
+  }
+}
+
+@media (max-width: 1100px) {
+  /* One column: the sidebar stays whole */
+  .demo-sidebar-bar .app-sidebar-collapse {
+    display: none;
+  }
+}
+
 .demo-label {
   margin: 0;
   font-size: 0.6875rem;

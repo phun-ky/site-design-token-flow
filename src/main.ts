@@ -6,6 +6,7 @@ import { describeFlowSource } from './app/flow-source';
 import { loadFonts } from './app/fonts';
 import { mountHeader } from './app/header';
 import { browserStorage, chooseFlowTokens } from './app/saved-tokens';
+import { mountSidebarCollapse } from './app/sidebar';
 import { createZoom, mountZoomControls } from './app/zoom';
 import exampleTokens from './assets/data/design-tokens.tokens.json';
 import DesignToken from './classes/DesignToken';
@@ -358,6 +359,14 @@ toggleEl?.addEventListener('click', () => {
 
   toggleEl.setAttribute('aria-expanded', String(open));
 });
+
+// On a wide screen it collapses to a rail; the canvas takes the space (#120)
+const collapseEl = document.querySelector<HTMLButtonElement>(
+  '.app-sidebar-collapse'
+);
+
+if (collapseEl) mountSidebarCollapse(collapseEl, 'dtf-sidebar-flow');
+
 showSource();
 
 // Says what is being drawn before drawing it: a large flow takes a while,
@@ -374,7 +383,8 @@ requestAnimationFrame(() =>
     // The fonts the font tokens describe; each downloads when a pill first shows it
     loadFonts(getFontFaces(tokens));
 
-    // The canvas: the wheel and dragging pan, Ctrl or Cmd and the wheel zoom. On a
+    // The canvas: the wheel and dragging pan, Ctrl or Cmd and the wheel, or two
+    // fingers, zoom. On a
     // phone it opens on the first token of the inheritance flow, at a readable scale
     mountZoomControls((onChange) =>
       createZoom(

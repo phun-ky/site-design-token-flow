@@ -9,6 +9,7 @@ import {
   MIN_SCALE,
   PAN_STEP,
   PAN_STEP_LARGE,
+  pinchState,
   stepScale,
   READABLE_SCALE,
   readableStartState,
@@ -249,5 +250,100 @@ describe('zoom', () => {
       canvasKeyAction({ ...base, key: 'ArrowLeft', altKey: true }),
       null
     );
+  });
+
+  describe('pinchState', () => {
+    const start = { scale: 1, x: 100, y: 50 };
+    /** The content point under the midpoint of two fingers */
+    const under = (
+      state: { scale: number; x: number; y: number },
+      [a, b]: [{ x: number; y: number }, { x: number; y: number }]
+    ) => ({
+      x: ((a.x + b.x) / 2 - state.x) / state.scale,
+      y: ((a.y + b.y) / 2 - state.y) / state.scale
+    });
+
+    it('zooms in around the midpoint when the fingers spread', () => {
+      const from: [{ x: number; y: number }, { x: number; y: number }] = [
+        { x: 300, y: 200 },
+        { x: 400, y: 200 }
+      ];
+      const to: typeof from = [
+        { x: 250, y: 200 },
+        { x: 450, y: 200 }
+      ];
+      const next = pinchState(start, from, to);
+
+      assert.equal(next.scale, 2);
+      assert.deepEqual(under(next, to), under(start, from));
+    });
+
+    it('zooms out when the fingers pinch together', () => {
+      const next = pinchState(
+        start,
+        [
+          { x: 0, y: 0 },
+          { x: 0, y: 200 }
+        ],
+        [
+          { x: 0, y: 50 },
+          { x: 0, y: 150 }
+        ]
+      );
+
+      assert.equal(next.scale, 0.5);
+    });
+
+    it('pans when both fingers move together', () => {
+      const next = pinchState(
+        start,
+        [
+          { x: 10, y: 10 },
+          { x: 50, y: 10 }
+        ],
+        [
+          { x: 40, y: 30 },
+          { x: 80, y: 30 }
+        ]
+      );
+
+      assert.deepEqual(next, { scale: 1, x: 130, y: 70 });
+    });
+
+    it('keeps to the limits, relative to the 100% scale', () => {
+      const from: [{ x: number; y: number }, { x: number; y: number }] = [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 }
+      ];
+
+      assert.equal(
+        pinchState(start, from, [
+          { x: 0, y: 0 },
+          { x: 1000, y: 0 }
+        ]).scale,
+        MAX_SCALE
+      );
+      assert.equal(
+        pinchState(
+          { scale: 0.5, x: 0, y: 0 },
+          from,
+          [
+            { x: 0, y: 0 },
+            { x: 0.001, y: 0 }
+          ],
+          0.5
+        ).scale,
+        MIN_SCALE * 0.5
+      );
+    });
+
+    it('keeps the scale when the fingers started at the same point', () => {
+      const point = { x: 20, y: 20 };
+
+      assert.equal(
+        pinchState(start, [point, point], [point, { x: 80, y: 20 }]).scale,
+        1
+      );
+    });
   });
 });

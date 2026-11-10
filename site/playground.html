@@ -61,7 +61,8 @@
       content="Design Token Flow: four design tokens as pills, each alias joined by a line to the token it references, from a button background color down to its base blue."
     />
     <script>
-      // Apply the saved (or system) theme before the first paint, see src/app/theme.ts
+      // Apply the saved (or system) theme and the sidebar's state before the
+      // first paint, see src/app/theme.ts
       try {
         const theme =
           localStorage.getItem('dtf-theme') ??
@@ -71,14 +72,32 @@
 
         if (theme === 'light')
           document.documentElement.classList.add('theme--light');
+        // The sidebar as it was left, see src/app/sidebar.ts
+        if (localStorage.getItem('dtf-sidebar-playground') === 'collapsed')
+          document.documentElement.classList.add('sidebar-collapsed');
       } catch {}
     </script>
   </head>
   <body>
     <main class="demo-main" id="content" tabindex="-1">
       <div class="demo-layout">
-        <aside class="demo-sidebar" aria-labelledby="playground-title">
-          <h1 id="playground-title">Playground</h1>
+        <aside
+          class="demo-sidebar"
+          id="playground-sidebar"
+          aria-labelledby="playground-title"
+        >
+          <div class="demo-sidebar-bar">
+            <h1 id="playground-title">Playground</h1>
+            <!-- Wide screens: collapses the sidebar to a rail (#120) -->
+            <button
+              type="button"
+              class="app-sidebar-collapse"
+              aria-label="Sidebar"
+              aria-controls="playground-sidebar"
+              aria-describedby="problems-title"
+              aria-expanded="true"
+            ></button>
+          </div>
 
           <fieldset class="demo-sources">
             <legend class="demo-label">Start from</legend>

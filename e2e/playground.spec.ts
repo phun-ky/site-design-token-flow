@@ -237,3 +237,40 @@ test('moves the editor to the line of a problem', async ({ page }) => {
 
   expect(selected).toBe('    "cta": {');
 });
+
+test('collapses the sidebar to a rail, and still tells about problems', async ({
+  page
+}) => {
+  const sidebar = page.locator('#playground-sidebar');
+  const editor = page.locator('.demo-editor');
+  const button = page.getByRole('button', { name: 'Sidebar' });
+
+  await page.getByRole('radio', { name: /^Your tokens/ }).check();
+
+  const narrow = (await editor.boundingBox())!.width;
+
+  await button.click();
+  await expect(button).toHaveAttribute('aria-expanded', 'false');
+  await expect(sidebar).toHaveCSS('width', '48px');
+  await expect(page.getByRole('radio', { name: /^Showcase/ })).toBeHidden();
+  await expect
+    .poll(async () => (await editor.boundingBox())!.width)
+    .toBeGreaterThan(narrow);
+
+  // Problems: announced, and described on the button, which has a dot
+  await page
+    .locator('#source')
+    .fill('{ "color": { "$type": "color", "a": { "$value": "{nope}" } } }');
+  await expect(page.locator('#problems-title')).toHaveText(/1 problem/);
+  await expect(button).toHaveAccessibleDescription(/1 problem/);
+  await expect
+    .poll(() =>
+      button.evaluate((el) => getComputedStyle(el, '::after').content)
+    )
+    .toBe('""');
+
+  await page.reload();
+  await expect(sidebar).toHaveCSS('width', '48px');
+  await button.click();
+  await expect(page.locator('#error li')).toHaveCount(1);
+});

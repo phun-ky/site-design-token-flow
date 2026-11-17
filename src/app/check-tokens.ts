@@ -56,6 +56,47 @@ export const checkTokenText = (text: string): CheckedTokens => {
 };
 
 /**
+ * A document's tokens as written, valid or not, each with the `$type` its
+ * groups give it (#127): what a file brings, though its references may only
+ * resolve once it is added to other tokens.
+ *
+ * @param {unknown} node The document, or a group in it
+ * @param {string[]} [path] The group's path
+ * @param {unknown} [inherited] The `$type` the group inherits
+ * @returns {{ name: string; $type?: string; $value: unknown }[]} The tokens, in order
+ * @example
+ * writtenTokens({ a: { $type: 'color', b: { $value: '{c}' } } });
+ * // => [{ name: 'a.b', $type: 'color', $value: '{c}' }]
+ */
+export const writtenTokens = (
+  node: unknown,
+  path: string[] = [],
+  inherited?: unknown
+): { name: string; $type?: string; $value: unknown }[] => {
+  if (typeof node !== 'object' || node === null || Array.isArray(node))
+    return [];
+
+  const group = node as Record<string, unknown>;
+  const type = group.$type ?? inherited;
+
+  return Object.entries(group).flatMap(([key, child]) => {
+    if (key.startsWith('$') && key !== '$root') return [];
+
+    const token = child as Record<string, unknown> | null;
+
+    return typeof token === 'object' && token !== null && '$value' in token
+      ? [
+          {
+            name: [...path, key].join('.'),
+            $type: (token.$type ?? type) as string | undefined,
+            $value: token.$value
+          }
+        ]
+      : writtenTokens(child, [...path, key], type);
+  });
+};
+
+/**
  * About how many tokens a text holds, before checking it: one per `$value`,
  * or per `value` in a Tokens Studio file without `$value`.
  *

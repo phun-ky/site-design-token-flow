@@ -23,7 +23,11 @@ import {
   type Preset
 } from '../src/app/saved-tokens';
 import { mountSidebarCollapse } from '../src/app/sidebar';
-import { formatBytes, refuseTokenFile } from '../src/app/token-file';
+import {
+  formatBytes,
+  refuseTokenFile,
+  refuseTokenFiles
+} from '../src/app/token-file';
 import bundledTokens from '../src/assets/data/design-tokens.tokens.json';
 import {
   createDesignTokenElement,
@@ -650,26 +654,36 @@ const useDocument = async (text: string) => {
  * in the browser with progress, then read in the worker. Every JSON file goes
  * through the import wizard, to check its format and preview its tokens; a
  * Tokens Studio file to choose its theme or sets, and when you have tokens,
- * to add to them or replace them.
+ * to add to them or replace them. `rest` names the files still to load
+ * after it, and `position` says which of them it is.
+ *
+ * @returns {Promise<boolean>} Whether it loaded, so the files after it may too
  */
-const loadFile = async (file: File) => {
-  if (loading) return;
+const loadFile = async (
+  file: File,
+  rest: string[] = [],
+  position?: string
+): Promise<boolean> => {
+  /** Says why the file didn't load, and that the files after it didn't */
+  const stop = (message: string, refused = false) => {
+    showFileStatus(
+      rest.length
+        ? `${message} ${rest.length === 1 ? 'The file after it was' : `The ${rest.length} files after it were`} not loaded either: ${rest.map((name) => `"${name}"`).join(', ')}.`
+        : message,
+      { refused }
+    );
 
-  const tooLarge = refuseTokenFile(file);
-
-  if (tooLarge) return showFileStatus(tooLarge, { refused: true });
-
-  loading = true;
+    return false;
+  };
 
   try {
     const text = await readFile(file);
 
-    if (text === null)
-      return showFileStatus(`Cancelled: "${file.name}" was not loaded.`);
+    if (text === null) return stop(`Cancelled: "${file.name}" was not loaded.`);
 
     const refused = refuseTokenFile(file, text);
 
-    if (refused) return showFileStatus(refused, { refused: true });
+    if (refused) return stop(refused, true);
 
     showFileStatus(
       `Checking ${plural(countTokens(text), 'token')} in "${file.name}"`,
@@ -685,6 +699,7 @@ const loadFile = async (file: File) => {
     if (converted) {
       const result = await runImportWizard({
         fileName: file.name,
+        position,
         first: converted,
         convert: (choice) => convert(text, choice),
         check,
@@ -692,10 +707,9 @@ const loadFile = async (file: File) => {
       });
 
       if (!result) {
-        showFileStatus(`Kept your tokens. "${file.name}" was not loaded.`);
         loadFileEl.focus();
 
-        return;
+        return stop(`Kept your tokens. "${file.name}" was not loaded.`);
       }
 
       const studio = result.format === 'tokens-studio';
@@ -715,6 +729,7 @@ const loadFile = async (file: File) => {
       // Not JSON: it can only replace your tokens, so ask first
       const result = await runImportWizard({
         fileName: file.name,
+        position,
         first: {
           summary: {
             format: 'dtcg',
@@ -730,11 +745,8 @@ const loadFile = async (file: File) => {
         yours: { document: null, count: yours.count }
       });
 
-      if (!result) {
-        showFileStatus(`Kept your tokens. "${file.name}" was not loaded.`);
-
-        return;
-      }
+      if (!result)
+        return stop(`Kept your tokens. "${file.name}" was not loaded.`);
     }
 
     showFileStatus(`Saving "${file.name}" in this browser`, {
@@ -752,8 +764,38 @@ const loadFile = async (file: File) => {
           : `Loaded "${file.name}" (${formatBytes(file.size)}): ${summary}.`,
       { refused: !saved }
     );
+
+    return true;
   } catch {
-    showFileStatus(`"${file.name}" could not be read.`, { refused: true });
+    return stop(`"${file.name}" could not be read.`, true);
+  }
+};
+/**
+ * Loads files in the order given, each through its own wizard and added on
+ * top of the ones before it (#127). They must fit in 2 MB together, and a
+ * file not loaded stops the ones after it.
+ *
+ * @param {File[]} files The files chosen or dropped
+ */
+const loadFiles = async (files: File[]) => {
+  if (loading || !files.length) return;
+
+  const refused = refuseTokenFiles(files);
+
+  if (refused) return showFileStatus(refused, { refused: true });
+
+  loading = true;
+
+  try {
+    for (const [index, file] of files.entries()) {
+      const loaded = await loadFile(
+        file,
+        files.slice(index + 1).map(({ name }) => name),
+        files.length > 1 ? `${index + 1} of ${files.length}` : undefined
+      );
+
+      if (!loaded) break;
+    }
   } finally {
     loading = false;
   }
@@ -846,12 +888,11 @@ $<HTMLButtonElement>('#new-token-open').addEventListener('click', () =>
 
 loadFileEl.addEventListener('click', () => fileEl.click());
 fileEl.addEventListener('change', () => {
-  const [file] = fileEl.files ?? [];
+  const files = [...(fileEl.files ?? [])];
 
-  // The same file can be chosen again
+  // The same files can be chosen again
   fileEl.value = '';
-
-  if (file) void loadFile(file);
+  void loadFiles(files);
 });
 
 // A file dropped anywhere on the playground loads it; dropped text is left
@@ -878,9 +919,7 @@ mainEl.addEventListener('drop', (event) => {
 
   event.preventDefault();
 
-  const [file] = event.dataTransfer?.files ?? [];
-
-  if (file) void loadFile(file);
+  void loadFiles([...(event.dataTransfer?.files ?? [])]);
 });
 prefixEl.addEventListener('input', () => {
   render();

@@ -68,6 +68,29 @@ describe('convertTokenText', () => {
     assert.equal(chosen?.conversion.notes[0].kind, 'left-out');
   });
 
+  it('reads a file as the format chosen, over the guess (#128)', () => {
+    // Tokens Studio in the $value style, with only DTCG types: guessed DTCG
+    const text = JSON.stringify({
+      space: { s: { $type: 'number', $value: 4 } }
+    });
+
+    assert.equal(convertTokenText(text)?.summary.format, 'dtcg');
+
+    const studio = convertTokenText(text, { format: 'tokens-studio' });
+
+    assert.equal(studio?.summary.format, 'tokens-studio');
+    assert.equal(studio?.conversion.converted, 1);
+    assert.equal(
+      convertTokenText(STUDIO, { format: 'dtcg' })?.summary.format,
+      'dtcg'
+    );
+    // Only an object can be read as Tokens Studio
+    assert.equal(
+      convertTokenText('[]', { format: 'tokens-studio' })?.summary.format,
+      'dtcg'
+    );
+  });
+
   it('returns null for text that is not JSON', () => {
     assert.equal(convertTokenText('{ "a": '), null);
   });

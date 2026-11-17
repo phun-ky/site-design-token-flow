@@ -37,6 +37,17 @@ const drop = async (page: Page, file: typeof FILE, target = '#groups') => {
   await expect(page.locator('#drop')).toHaveClass(/is-dropping/);
   await page.locator(target).dispatchEvent('drop', { dataTransfer: transfer });
 };
+const wizard = (page: Page) => page.getByRole('dialog', { name: /^Import/ });
+/** Steps through the import wizard to load the file, with `count` tokens */
+const loadThroughWizard = async (page: Page, count: number) => {
+  await expect(wizard(page)).toBeVisible();
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page
+    .getByRole('button', {
+      name: `Load ${count} token${count === 1 ? '' : 's'}`
+    })
+    .click();
+};
 /** Every text the status shows from now on */
 const recordStatus = (page: Page) =>
   page.evaluate(() => {
@@ -77,6 +88,7 @@ test('loads a chosen file in steps, checks it in a worker, saves it, and sends n
 
   await page.getByRole('button', { name: 'Load a file' }).click();
   await (await chooser).setFiles(FILE);
+  await loadThroughWizard(page, 2);
 
   await expect(page.locator(status)).toHaveText(
     'Loaded "colors.tokens.json" (1 kB): 2 tokens.'
@@ -101,6 +113,7 @@ test('loads a chosen file in steps, checks it in a worker, saves it, and sends n
 
 test('loads a file dropped anywhere on the playground', async ({ page }) => {
   await drop(page, FILE);
+  await loadThroughWizard(page, 2);
 
   await expect(page.locator(status)).toHaveText(
     'Loaded "colors.tokens.json" (1 kB): 2 tokens.'
@@ -119,6 +132,12 @@ test('loads a large file, and keeps the page usable while checking it', async ({
     mimeType: 'application/json',
     buffer: Buffer.from(text)
   });
+  // The preview lists the first tokens, not all of them
+  await expect(wizard(page)).toContainText(
+    'Preview: the first 100 of 976 tokens'
+  );
+  await expect(wizard(page).locator('.demo-preview tbody tr')).toHaveCount(100);
+  await loadThroughWizard(page, 976);
   // The filter takes input while the worker checks
   await page.locator('#filter').fill('brand');
   await expect(page.locator(status)).toContainText(
@@ -182,6 +201,61 @@ test('refuses a file that is too large or not text, and keeps the editor', async
     '"logo.png" is not a text file: load a .json token file.'
   );
   await expect(page.locator('#source')).toHaveValue(before);
+});
+
+test('shows the format it detected and a preview, before loading (#128)', async ({
+  page
+}) => {
+  await page.locator('#file').setInputFiles(FILE);
+
+  await expect(wizard(page)).toContainText('A DTCG file with 2 tokens.');
+  await expect(
+    page.getByRole('radio', { name: /^DTCG 2025.10/ })
+  ).toBeChecked();
+  await expect(
+    page.getByRole('radio', { name: /^DTCG 2025.10/ })
+  ).toHaveAccessibleName(/Detected/);
+
+  const preview = page.getByRole('region', { name: 'Preview: 2 tokens' });
+
+  await expect(preview.getByRole('row')).toHaveCount(3);
+  await expect(preview.getByRole('row', { name: /color\.cta/ })).toContainText(
+    '{color.blue}'
+  );
+  // Nothing loads until the wizard says so
+  await expect(page.getByRole('radio', { name: /^Showcase/ })).toBeChecked();
+});
+
+test('reads a file as the other format when the guess is wrong (#128)', async ({
+  page
+}) => {
+  // Tokens Studio in the $value style, with only DTCG types: guessed DTCG
+  await page.locator('#file').setInputFiles({
+    ...FILE,
+    name: 'studio.json',
+    buffer: Buffer.from(
+      JSON.stringify({ space: { s: { $type: 'number', $value: 4 } } })
+    )
+  });
+  await expect(
+    page.getByRole('radio', { name: /^DTCG 2025.10/ })
+  ).toBeChecked();
+
+  const studio = page.getByRole('radio', { name: /^Tokens Studio/ });
+
+  await studio.check();
+  await expect(wizard(page)).toContainText('A Tokens Studio file with one set');
+  await expect(studio).toBeFocused();
+  await expect(page.locator('#import-steps')).toContainText(
+    'Choose the tokens'
+  );
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(page.locator('.demo-sets').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.getByRole('button', { name: 'Load 1 token' }).click();
+  await expect(page.locator(status)).toContainText(
+    'Loaded 1 token from "studio.json", converted from Tokens Studio'
+  );
 });
 
 test('validates a loaded file like typed text', async ({ page }) => {

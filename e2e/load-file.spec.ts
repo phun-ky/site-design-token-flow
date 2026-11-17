@@ -18,17 +18,27 @@ const FILE = {
 };
 const pills = '#groups .design-token';
 const status = '#file-status';
-/** Drops a file on the playground, as dragging one from the desktop does */
-const drop = async (page: Page, file: typeof FILE, target = '#groups') => {
+/** Drops files on the playground, as dragging them from the desktop does */
+const drop = async (
+  page: Page,
+  files: typeof FILE | (typeof FILE)[],
+  target = '#groups'
+) => {
   const transfer = await page.evaluateHandle(
-    ({ name, mimeType, text }) => {
+    (list) => {
       const data = new DataTransfer();
 
-      data.items.add(new File([text], name, { type: mimeType }));
+      list.forEach(({ name, mimeType, text }) =>
+        data.items.add(new File([text], name, { type: mimeType }))
+      );
 
       return data;
     },
-    { name: file.name, mimeType: file.mimeType, text: file.buffer.toString() }
+    [files].flat().map(({ name, mimeType, buffer }) => ({
+      name,
+      mimeType,
+      text: buffer.toString()
+    }))
   );
 
   await page.locator(target).dispatchEvent('dragover', {
@@ -86,7 +96,7 @@ test('loads a chosen file in steps, checks it in a worker, saves it, and sends n
 
   const chooser = page.waitForEvent('filechooser');
 
-  await page.getByRole('button', { name: 'Load a file' }).click();
+  await page.getByRole('button', { name: 'Load files' }).click();
   await (await chooser).setFiles(FILE);
   await loadThroughWizard(page, 2);
 
@@ -256,6 +266,94 @@ test('reads a file as the other format when the guess is wrong (#128)', async ({
   await expect(page.locator(status)).toContainText(
     'Loaded 1 token from "studio.json", converted from Tokens Studio'
   );
+});
+
+test.describe('several files (#127)', () => {
+  const core = {
+    ...FILE,
+    name: 'core.json',
+    buffer: Buffer.from(
+      JSON.stringify({
+        color: {
+          $type: 'color',
+          blue: { $value: { colorSpace: 'srgb', components: [0, 0.33, 0.94] } }
+        }
+      })
+    )
+  };
+  const semantic = {
+    ...FILE,
+    name: 'semantic.json',
+    buffer: Buffer.from(
+      JSON.stringify({
+        color: { $type: 'color', cta: { $value: '{color.blue}' } }
+      })
+    )
+  };
+
+  test('loads dropped files in a row, each added on top of the last', async ({
+    page
+  }) => {
+    await drop(page, [core, semantic]);
+
+    await expect(wizard(page)).toHaveAccessibleName(
+      /Import core\.json, file 1 of 2/
+    );
+    await page.getByRole('button', { name: 'Next' }).click();
+    await page.getByRole('button', { name: 'Load 1 token' }).click();
+
+    await expect(wizard(page)).toHaveAccessibleName(
+      /Import semantic\.json, file 2 of 2/
+    );
+    // Its token refers to the first file's, and is in the preview all the same
+    await expect(
+      page.getByRole('region', { name: 'Preview: 1 token' })
+    ).toContainText('{color.blue}');
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(
+      page.getByRole('radio', { name: /^Add to your tokens/ })
+    ).toBeChecked();
+    // The reference to the first file resolves
+    await expect(wizard(page)).toContainText('No problems after loading.');
+    await page.getByRole('button', { name: 'Add 1 token' }).click();
+
+    await expect(wizard(page)).toBeHidden();
+    await expect(page.locator(pills)).toHaveCount(2);
+    await expect(page.locator(status)).toContainText(
+      'Added 1 token from "semantic.json"'
+    );
+    await expect(page.locator('#error li')).toHaveCount(0);
+  });
+
+  test('chooses several files, and stops at one not loaded', async ({
+    page
+  }) => {
+    await page.locator('#file').setInputFiles([core, semantic, FILE]);
+    await expect(wizard(page)).toHaveAccessibleName(/file 1 of 3/);
+    await page.getByRole('button', { name: 'Cancel' }).click();
+
+    await expect(wizard(page)).toBeHidden();
+    await expect(page.locator(status)).toHaveText(
+      'Kept your tokens. "core.json" was not loaded. The 2 files after it were not loaded either: "semantic.json", "colors.tokens.json".'
+    );
+    await expect(page.getByRole('radio', { name: /^Showcase/ })).toBeChecked();
+  });
+
+  test('refuses files too large together', async ({ page }) => {
+    const most = {
+      ...FILE,
+      name: 'a.json',
+      buffer: Buffer.alloc(1.5 * 1024 * 1024, ' ')
+    };
+
+    await page
+      .locator('#file')
+      .setInputFiles([most, { ...most, name: 'b.json' }]);
+    await expect(page.locator(status)).toHaveText(
+      'These 2 files (3.0 MB) are too large together: the playground keeps token files up to 2.0 MB in all in your browser.'
+    );
+    await expect(wizard(page)).toBeHidden();
+  });
 });
 
 test('validates a loaded file like typed text', async ({ page }) => {

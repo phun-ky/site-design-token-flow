@@ -3,10 +3,18 @@
 // replace them, after a review of what changes. Text from the file is only
 // ever set as text, never as markup.
 import type { CheckedTokens } from '../src/app/check-tokens';
-import type { ConvertedTokens, FileSummary } from '../src/app/convert-tokens';
+import type {
+  ConvertChoice,
+  ConvertedTokens,
+  FileSummary
+} from '../src/app/convert-tokens';
 import {
+  colorToCss,
+  colorToHex,
   mergeTokenDocuments,
+  type DTCGColorValue,
   type DTCGDocument,
+  type FlatDesignToken,
   type Merge
 } from '../src/tokens';
 import type {
@@ -19,11 +27,8 @@ export interface WizardOptions {
   fileName: string;
   /** The file, converted with the first theme or every set */
   first: ConvertedTokens;
-  /** Converts the file again with another theme or other sets */
-  convert: (choice: {
-    theme?: string;
-    uses?: Record<string, SetUse>;
-  }) => Promise<ConvertedTokens | null>;
+  /** Converts the file again with another theme, other sets or format */
+  convert: (choice: ConvertChoice) => Promise<ConvertedTokens | null>;
   /** Checks a document, to report problems after an add */
   check: (text: string) => Promise<CheckedTokens>;
   /** Your tokens, when you have some, to add to or replace */
@@ -32,6 +37,8 @@ export interface WizardOptions {
 
 export interface WizardResult {
   mode: 'add' | 'replace';
+  /** The format the file was read as */
+  format: FileSummary['format'];
   /** The document to load: the merge, or the file's tokens */
   document: DTCGDocument;
   /** How many tokens it brings, and what an add overwrote */
@@ -68,6 +75,16 @@ const short = (value: unknown) => {
 
   return text.length > 60 ? `${text.slice(0, 57)}…` : text;
 };
+/** How many tokens the preview shows; a large file would be slow to list */
+const PREVIEW = 100;
+/** A token's value as written: an alias, a colour as hex or CSS, or JSON */
+const previewValue = ({ $type, $value, value }: FlatDesignToken) =>
+  typeof $value === 'string'
+    ? $value
+    : $type === 'color'
+      ? (colorToHex(value as DTCGColorValue) ??
+        colorToCss(value as DTCGColorValue))
+      : short($value);
 const KINDS: { kind: NoteKind; title: string }[] = [
   { kind: 'math', title: 'Math worked out' },
   { kind: 'resolved', title: 'References inside text resolved' },
@@ -123,15 +140,19 @@ export const runImportWizard = (
   const stepsEl = dialog.querySelector('#import-steps') as HTMLOListElement;
   const back = dialog.querySelector('#import-back') as HTMLButtonElement;
   const next = dialog.querySelector('#import-next') as HTMLButtonElement;
-  const studio = options.first.summary.format === 'tokens-studio';
-  const steps = [
+  // The guess; the format can be switched on the first step (#128)
+  const guessed = options.first.summary.format;
+  const steps = () => [
     { id: 'format', title: 'Format' },
-    ...(studio ? [{ id: 'sets', title: 'Choose the tokens' }] : []),
+    ...(current.summary.format === 'tokens-studio'
+      ? [{ id: 'sets', title: 'Choose the tokens' }]
+      : []),
     { id: 'review', title: options.yours ? 'Review and load' : 'Review' }
   ];
 
   let step = 0;
   let current = options.first;
+  let format = guessed;
   let theme: string | undefined = options.first.summary.themes[0]?.id;
   let mode: 'add' | 'replace' = 'add';
   let merge: Merge | null = null;
@@ -145,6 +166,7 @@ export const runImportWizard = (
 
     return {
       mode: adding ? 'add' : 'replace',
+      format: current.summary.format,
       document: adding ? merge!.document : current.conversion.document,
       count: current.conversion.converted,
       overwritten: adding ? merge!.overwritten.length : 0
@@ -168,15 +190,12 @@ export const runImportWizard = (
     afterProblems = checked.problems.length;
     render();
   };
-  const reconvert = async (choice: {
-    theme?: string;
-    uses?: Record<string, SetUse>;
-  }) => {
+  const reconvert = async (choice: ConvertChoice) => {
     const id = (run += 1);
 
     body.setAttribute('aria-busy', 'true');
 
-    const converted = await options.convert(choice);
+    const converted = await options.convert({ ...choice, format });
 
     body.removeAttribute('aria-busy');
 
@@ -185,12 +204,121 @@ export const runImportWizard = (
     current = converted;
     render();
   };
+  /** A radio to read the file as one format, focused again once converted */
+  const formatOption = (
+    value: FileSummary['format'],
+    label: string,
+    detail: string
+  ) => {
+    const input = el<HTMLInputElement>('input', {
+      type: 'radio',
+      name: 'import-format',
+      value,
+      checked: current.summary.format === value
+    });
+
+    input.addEventListener('change', async () => {
+      format = value;
+      await reconvert({});
+      theme = current.summary.themes[0]?.id;
+      body
+        .querySelector<HTMLInputElement>('[name="import-format"]:checked')
+        ?.focus();
+    });
+
+    return el(
+      'label',
+      { class: 'demo-format' },
+      input,
+      el(
+        'span',
+        {},
+        label,
+        el(
+          'span',
+          { class: 'demo-muted' },
+          `${guessed === value ? 'Detected. ' : ''}${detail}`
+        )
+      )
+    );
+  };
+  /** The first tokens of the file, as they will load, in a scrolling box */
+  const preview = () => {
+    const { tokens, problems } = current.checked;
+
+    return [
+      el(
+        'h3',
+        { id: 'import-preview-title', class: 'demo-label' },
+        tokens.length > PREVIEW
+          ? `Preview: the first ${PREVIEW} of ${plural(tokens.length, 'token')}`
+          : `Preview: ${plural(tokens.length, 'token')}`
+      ),
+      el(
+        'div',
+        {
+          class: 'demo-preview',
+          role: 'region',
+          tabindex: '0',
+          'aria-labelledby': 'import-preview-title'
+        },
+        el(
+          'table',
+          { class: 'demo-sets' },
+          el(
+            'thead',
+            {},
+            el(
+              'tr',
+              {},
+              el('th', { scope: 'col' }, 'Token'),
+              el('th', { scope: 'col' }, 'Type'),
+              el('th', { scope: 'col' }, 'Value')
+            )
+          ),
+          el(
+            'tbody',
+            {},
+            ...tokens
+              .slice(0, PREVIEW)
+              .map((token) =>
+                el(
+                  'tr',
+                  {},
+                  el('th', { scope: 'row' }, el('code', {}, token.name)),
+                  el('td', {}, token.$type),
+                  el('td', {}, el('code', {}, previewValue(token)))
+                )
+              )
+          )
+        )
+      ),
+      problems.length
+        ? el(
+            'p',
+            { class: 'demo-hint' },
+            `${plural(problems.length, 'problem')} found; tokens with problems are not in the preview.`
+          )
+        : null
+    ];
+  };
   const formatStep = () =>
     el(
       'div',
       { class: 'demo-wizard-step' },
       el('p', {}, describeFile(current.summary)),
-      studio
+      el(
+        'fieldset',
+        { class: 'demo-formats' },
+        el('legend', { class: 'demo-label' }, 'Read the file as'),
+        formatOption('dtcg', 'DTCG 2025.10', 'Loaded as it is.'),
+        formatOption(
+          'tokens-studio',
+          'Tokens Studio',
+          'Converted to DTCG, with a theme or sets to choose next.'
+        )
+      ),
+      current.summary.format === 'tokens-studio'
         ? el(
             'p',
             { class: 'demo-muted' },
@@ -203,7 +331,8 @@ export const runImportWizard = (
             { class: 'demo-muted' },
             'It has no $themes or $metadata, so its top-level keys are read as groups of one set.'
           )
-        : null
+        : null,
+      ...preview()
     );
   const setsStep = () => {
     const select = el<HTMLSelectElement>(
@@ -331,7 +460,7 @@ export const runImportWizard = (
       el(
         'p',
         {},
-        `${plural(current.conversion.converted, 'token')} from ${options.fileName}${studio && theme ? `, theme “${current.summary.themes.find(({ id }) => id === theme)?.name ?? theme}”` : ''}.`
+        `${plural(current.conversion.converted, 'token')} from ${options.fileName}${current.summary.format === 'tokens-studio' && theme ? `, theme “${current.summary.themes.find(({ id }) => id === theme)?.name ?? theme}”` : ''}.`
       )
     ];
 
@@ -434,10 +563,10 @@ export const runImportWizard = (
     return el('div', { class: 'demo-wizard-step' }, ...parts);
   };
   const render = () => {
-    const id = steps[step].id;
+    const id = steps()[step].id;
 
     stepsEl.replaceChildren(
-      ...steps.map(({ title }, index) =>
+      ...steps().map(({ title }, index) =>
         el(
           'li',
           {
@@ -463,20 +592,24 @@ export const runImportWizard = (
         : mode === 'add' && options.yours?.document
           ? `Add ${plural(current.conversion.converted, 'token')}`
           : `Load ${plural(current.conversion.converted, 'token')}`;
-    next.disabled = id === 'review' && current.conversion.converted === 0;
+    // A DTCG file with only problems still loads, to list them
+    next.disabled =
+      id === 'review' &&
+      current.conversion.converted === 0 &&
+      current.summary.format === 'tokens-studio';
   };
 
   return new Promise((resolve) => {
     const go = (to: number) => {
       step = to;
 
-      if (steps[step].id === 'review') void prepare();
+      if (steps()[step].id === 'review') void prepare();
       else render();
 
       next.focus();
     };
     const onNext = () => {
-      if (steps[step].id !== 'review') return go(step + 1);
+      if (steps()[step].id !== 'review') return go(step + 1);
 
       dialog.close('done');
     };

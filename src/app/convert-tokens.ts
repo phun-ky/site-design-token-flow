@@ -26,6 +26,14 @@ export interface FileSummary {
   themes: { id: string; name: string; group?: string }[];
 }
 
+/** A theme's id or each set's use, and the format to read the file as */
+export interface ConvertChoice {
+  theme?: string;
+  uses?: Record<string, SetUse>;
+  /** Overrides the format guessed from the file (#128) */
+  format?: FileSummary['format'];
+}
+
 export interface ConvertedTokens {
   summary: FileSummary;
   /** How each set was used */
@@ -40,14 +48,15 @@ export interface ConvertedTokens {
  * Reads a token file the playground was given, converting it from Tokens
  * Studio when it is one (#113, #114): with the sets of a theme, or the sets
  * as given. A DTCG file is returned as it is, as a conversion of nothing.
+ * The format is guessed, unless the choice names one.
  *
  * @param {string} text The file's JSON
- * @param {{ theme?: string; uses?: Record<string, SetUse> }} [choice] A theme's id, or each set's use
+ * @param {ConvertChoice} [choice] A theme's id, or each set's use, and the format
  * @returns {ConvertedTokens | null} The result, or null when the text isn't JSON
  */
 export const convertTokenText = (
   text: string,
-  choice: { theme?: string; uses?: Record<string, SetUse> } = {}
+  choice: ConvertChoice = {}
 ): ConvertedTokens | null => {
   let json: unknown;
 
@@ -57,7 +66,13 @@ export const convertTokenText = (
     return null;
   }
 
-  if (!isTokensStudio(json)) {
+  const object =
+    typeof json === 'object' && json !== null && !Array.isArray(json);
+  const studio = choice.format
+    ? choice.format === 'tokens-studio' && object
+    : isTokensStudio(json);
+
+  if (!studio) {
     const checked = checkTokenText(text);
 
     return {

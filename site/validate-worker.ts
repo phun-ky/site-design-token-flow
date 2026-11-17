@@ -5,9 +5,9 @@
 import { checkTokenText, type CheckedTokens } from '../src/app/check-tokens';
 import {
   convertTokenText,
+  type ConvertChoice,
   type ConvertedTokens
 } from '../src/app/convert-tokens';
-import type { SetUse } from '../src/tokens/tokens-studio';
 
 interface CheckMessage {
   id: number;
@@ -15,12 +15,10 @@ interface CheckMessage {
   text: string;
 }
 
-interface ConvertMessage {
+interface ConvertMessage extends ConvertChoice {
   id: number;
   kind: 'convert';
   text: string;
-  theme?: string;
-  uses?: Record<string, SetUse>;
 }
 
 export type CheckRequest = CheckMessage | ConvertMessage;

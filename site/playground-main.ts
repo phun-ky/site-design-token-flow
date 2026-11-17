@@ -10,7 +10,7 @@ import {
   type CheckedProblem,
   type CheckedTokens
 } from '../src/app/check-tokens';
-import type { ConvertedTokens } from '../src/app/convert-tokens';
+import type { ConvertChoice, ConvertedTokens } from '../src/app/convert-tokens';
 import { loadFonts } from '../src/app/fonts';
 import { formatHtml } from '../src/app/format-html';
 import { mountHeader } from '../src/app/header';
@@ -35,7 +35,6 @@ import {
   renderDesignToken,
   type DTCGDocument
 } from '../src/tokens';
-import type { SetUse } from '../src/tokens/tokens-studio';
 
 import { runImportWizard } from './import-wizard';
 import { mountNewTokenForm } from './new-token-form';
@@ -189,7 +188,7 @@ const check = async (text: string): Promise<CheckedTokens> => {
 /** Reads a token file, converting a Tokens Studio file, in the worker */
 const convert = async (
   text: string,
-  choice: { theme?: string; uses?: Record<string, SetUse> } = {}
+  choice: ConvertChoice = {}
 ): Promise<ConvertedTokens | null> => {
   // Without a worker, the converter loads here, when first needed
   if (!worker)
@@ -647,10 +646,11 @@ const useDocument = async (text: string) => {
   return saved;
 };
 /**
- * Loads a token file from your computer (#102, #109, #114, #117): read in
- * the browser with progress, then read in the worker. A Tokens Studio file
- * goes through the import wizard, to choose its theme or sets; any file goes
- * through it when you have tokens, to add to them or replace them.
+ * Loads a token file from your computer (#102, #109, #114, #117, #128): read
+ * in the browser with progress, then read in the worker. Every JSON file goes
+ * through the import wizard, to check its format and preview its tokens; a
+ * Tokens Studio file to choose its theme or sets, and when you have tokens,
+ * to add to them or replace them.
  */
 const loadFile = async (file: File) => {
   if (loading) return;
@@ -678,12 +678,11 @@ const loadFile = async (file: File) => {
 
     const converted = await convert(text);
     const yours = yourTokens();
-    const studio = converted?.summary.format === 'tokens-studio';
 
     let loadText = text;
     let message = '';
 
-    if (converted && (studio || yours)) {
+    if (converted) {
       const result = await runImportWizard({
         fileName: file.name,
         first: converted,
@@ -699,6 +698,8 @@ const loadFile = async (file: File) => {
         return;
       }
 
+      const studio = result.format === 'tokens-studio';
+
       // A DTCG file replacing yours keeps its own formatting
       loadText =
         result.mode === 'replace' && !studio
@@ -707,7 +708,9 @@ const loadFile = async (file: File) => {
       message =
         result.mode === 'add'
           ? `Added ${plural(result.count, 'token')} from "${file.name}"${result.overwritten ? `, overwriting ${result.overwritten}` : ''}`
-          : `Loaded ${plural(result.count, 'token')} from "${file.name}"${studio ? ', converted from Tokens Studio' : ''}`;
+          : yours || studio
+            ? `Loaded ${plural(result.count, 'token')} from "${file.name}"${studio ? ', converted from Tokens Studio' : ''}`
+            : '';
     } else if (!converted && yours) {
       // Not JSON: it can only replace your tokens, so ask first
       const result = await runImportWizard({

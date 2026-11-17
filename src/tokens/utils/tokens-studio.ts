@@ -189,25 +189,25 @@ const WEIGHT_NAMES: Record<string, number> = {
 };
 const normaliseType = (type: string | undefined) =>
   type ? (TYPE_ALIASES[type] ?? type) : undefined;
-/** Walks a set's tokens: name, the token, and its type inherited from groups */
+/**
+ * Walks a set's tokens: name, the token, and its type inherited from
+ * groups, normalised unless `normalise` says otherwise
+ */
 const walk = (
   node: Json,
   visit: (name: string, token: Json, type: string | undefined) => void,
   path: string[] = [],
-  inherited?: string
+  inherited?: string,
+  normalise = normaliseType
 ) => {
-  const type = normaliseType(typeOf(node)) ?? inherited;
+  const type = normalise(typeOf(node)) ?? inherited;
 
   Object.entries(node).forEach(([key, child]) => {
     if (key.startsWith('$') || !isObject(child)) return;
 
     if (isToken(child))
-      visit(
-        [...path, key].join('.'),
-        child,
-        normaliseType(typeOf(child)) ?? type
-      );
-    else walk(child, visit, [...path, key], type);
+      visit([...path, key].join('.'), child, normalise(typeOf(child)) ?? type);
+    else walk(child, visit, [...path, key], type, normalise);
   });
 };
 
@@ -226,16 +226,24 @@ export const isTokensStudio = (json: unknown): boolean => {
 
   let found = false;
 
-  walk(json, (_name, token, type) => {
-    if (found) return;
+  // Types as written: DTCG's fontWeight, fontFamily and shadow normalise to
+  // Tokens Studio's names, and must not count as them (#128)
+  walk(
+    json,
+    (_name, token, type) => {
+      if (found) return;
 
-    const value = valueOf(token);
+      const value = valueOf(token);
 
-    found =
-      !('$value' in token) ||
-      STUDIO_TYPES.has(type ?? '') ||
-      (type === 'color' && typeof value === 'string' && !ALIAS.test(value));
-  });
+      found =
+        !('$value' in token) ||
+        STUDIO_TYPES.has(type ?? '') ||
+        (type === 'color' && typeof value === 'string' && !ALIAS.test(value));
+    },
+    [],
+    undefined,
+    (type) => type
+  );
 
   return found;
 };

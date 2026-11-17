@@ -60,6 +60,28 @@ const STATES: {
     }
   },
   {
+    name: 'playground with the import wizard previewing a file',
+    path: 'playground',
+    prepare: async (page) => {
+      await page.locator('#file').setInputFiles({
+        name: 'tokens.json',
+        mimeType: 'application/json',
+        buffer: Buffer.from(
+          JSON.stringify({
+            color: {
+              $type: 'color',
+              blue: {
+                $value: { colorSpace: 'srgb', components: [0, 0.33, 0.94] }
+              },
+              cta: { $value: '{color.blue}' }
+            }
+          })
+        )
+      });
+      await expect(page.locator('.demo-preview')).toBeVisible();
+    }
+  },
+  {
     name: 'playground with the export dialog open',
     path: 'playground',
     prepare: async (page) => {

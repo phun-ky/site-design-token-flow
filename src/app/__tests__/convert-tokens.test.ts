@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { convertTokenText } from '../convert-tokens';
+import type { DTCGDocument } from '../../tokens';
+import { convertTokenText, YOUR_TOKENS_SET } from '../convert-tokens';
 
 const STUDIO = JSON.stringify({
   core: { red: { value: '#c14242', type: 'color' } },
@@ -100,6 +101,42 @@ describe('convertTokenText', () => {
     assert.equal(converted?.summary.sets[0].count, 1);
     // On its own, the reference doesn't resolve
     assert.equal(converted?.checked.tokens.length, 0);
+  });
+
+  it('resolves references to your tokens when adding, and keeps them references (#129)', () => {
+    const yours = {
+      color: {
+        $type: 'color',
+        red: { $value: { colorSpace: 'srgb', components: [1, 0, 0] } }
+      }
+    } as unknown as DTCGDocument;
+    const text = JSON.stringify({
+      semantic: {
+        text: { value: '{color.red}', type: 'color' },
+        soft: { value: 'rgba({color.red}, 0.5)', type: 'color' }
+      }
+    });
+    const alone = convertTokenText(text);
+    const added = convertTokenText(text, { yours });
+    const document = added?.conversion.document as Record<string, any>;
+    const details =
+      document.$extensions['net.phun-ky.design-token-flow'].tokensStudio;
+
+    // On its own, both are left out
+    assert.equal(alone?.conversion.converted, 0);
+    assert.equal(added?.conversion.converted, 2);
+    assert.equal(added?.summary.yours, 1);
+    assert.equal(document.semantic.text.$value, '{color.red}');
+    assert.equal(document.semantic.soft.$value.alpha, 0.5);
+    // Your tokens are not part of the file's export
+    assert.equal(YOUR_TOKENS_SET in details.remainder, false);
+    assert.equal(details.order.includes(YOUR_TOKENS_SET), false);
+    // Tokens that can't be read are passed over
+    assert.equal(
+      convertTokenText(text, { yours: [] as unknown as DTCGDocument })
+        ?.conversion.converted,
+      0
+    );
   });
 
   it('returns null for text that is not JSON', () => {

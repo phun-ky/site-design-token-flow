@@ -252,3 +252,54 @@ test('refuses a bad name, and says when a token will be replaced', async ({
   ).toBeHidden();
   await expect(page.locator(pills)).toHaveCount(1);
 });
+
+test('resolves references to your tokens when adding a Tokens Studio file (#129)', async ({
+  page
+}) => {
+  await page.getByRole('radio', { name: /^Your tokens/ }).check();
+  await page.locator('#source').fill(
+    JSON.stringify({
+      color: {
+        $type: 'color',
+        red: { $value: { colorSpace: 'srgb', components: [1, 0, 0] } }
+      }
+    })
+  );
+  await expect(page.locator(pills)).toHaveCount(1);
+  await page.locator('#file').setInputFiles({
+    ...FILE,
+    name: 'semantic.json',
+    buffer: Buffer.from(
+      JSON.stringify({
+        $metadata: { tokenSetOrder: ['global'] },
+        global: { text: { value: '{color.red}', type: 'color' } }
+      })
+    )
+  });
+  await page.getByRole('button', { name: 'Next' }).click();
+
+  // Your tokens: a fixed first row, used for references only
+  const yours = page.locator('.demo-sets tbody tr').first();
+
+  await expect(yours).toContainText('Your tokens');
+  await expect(yours).toContainText('Reference only');
+  await expect(page.locator('.demo-wizard-counts')).toContainText(
+    'Tokens to load1'
+  );
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(wizard(page)).toContainText('No problems after loading.');
+
+  // Replacing your tokens: the reference can't resolve, so the token is left out
+  await page.getByRole('radio', { name: /^Replace your tokens/ }).check();
+  await expect(
+    page.getByRole('button', { name: 'Load 0 tokens' })
+  ).toBeDisabled();
+  await page.getByRole('radio', { name: /^Add to your tokens/ }).check();
+  await page.getByRole('button', { name: 'Add 1 token' }).click();
+
+  await expect(page.locator(pills)).toHaveCount(2);
+  await expect(page.locator('#error li')).toHaveCount(0);
+  await expect(page.locator('#source')).toHaveValue(
+    /"\$value": "\{color\.red\}"/
+  );
+});

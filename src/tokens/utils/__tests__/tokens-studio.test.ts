@@ -157,6 +157,30 @@ describe('isTokensStudio', () => {
     );
     assert.equal(isTokensStudio([]), false);
   });
+
+  it("doesn't take DTCG's fontWeight, fontFamily or shadow for Tokens Studio's (#128)", () => {
+    assert.equal(
+      isTokensStudio({
+        font: {
+          weight: { $type: 'fontWeight', $value: 400 },
+          family: { $type: 'fontFamily', $value: ['Inter'] }
+        },
+        shadow: {
+          $type: 'shadow',
+          raised: { $value: [] }
+        }
+      }),
+      false
+    );
+    assert.equal(
+      isTokensStudio({ a: { $value: 400, $type: 'fontWeights' } }),
+      true
+    );
+    assert.equal(
+      isTokensStudio({ s: { $type: 'boxShadow', a: { $value: {} } } }),
+      true
+    );
+  });
 });
 
 describe('readTokensStudio', () => {

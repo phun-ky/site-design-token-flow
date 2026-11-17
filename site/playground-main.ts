@@ -690,8 +690,12 @@ const loadFile = async (
       { steps: steps(1) }
     );
 
-    const converted = await convert(text);
     const yours = yourTokens();
+    // The wizard starts on adding, where references to your tokens resolve
+    const converted = await convert(
+      text,
+      yours?.document ? { yours: yours.document } : {}
+    );
 
     let loadText = text;
     let message = '';

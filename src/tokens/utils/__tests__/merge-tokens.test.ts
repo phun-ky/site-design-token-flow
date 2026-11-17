@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
 import type { DTCGDocument } from '../../types/tokens';
-import { validateTokens } from '../design-tokens';
+import { DTF_EXTENSION_KEY, validateTokens } from '../design-tokens';
 import { mergeTokenDocuments } from '../merge-tokens';
 
 const red = { colorSpace: 'srgb', components: [1, 0, 0] };
@@ -192,6 +192,73 @@ describe('mergeTokenDocuments', () => {
     assert.deepEqual((document as Record<string, any>).$extensions, {
       studio: 'yours'
     });
+  });
+
+  it('combines both Tokens Studio files for the export, the file winning (#129)', () => {
+    const studio = (details: object) => ({
+      $extensions: {
+        [DTF_EXTENSION_KEY]: {
+          tokensStudio: { keyStyle: 'legacy', hasSets: true, ...details }
+        }
+      }
+    });
+    const theme = (id: string, name: string) => ({
+      id,
+      name,
+      selectedTokenSets: {}
+    });
+    const yours = {
+      ...BASE,
+      ...studio({
+        order: ['core', 'light'],
+        themes: [theme('l', 'Light'), theme('d', 'Dark')],
+        remainder: {
+          core: { old: { value: '1', type: 'number' } },
+          light: { a: { value: '#000', type: 'color' } }
+        },
+        groups: { core: { '': { type: 'number' } } }
+      })
+    } as unknown as DTCGDocument;
+    const file = {
+      color: { $type: 'color', blue: { $value: blue } },
+      ...studio({
+        order: ['light', 'brand'],
+        themes: [theme('d', 'Dark, new'), theme('b', 'Brand')],
+        remainder: {
+          light: { a: { value: '#fff', type: 'color' }, b: { value: '#111' } },
+          brand: { c: { value: '#222', type: 'color' } }
+        },
+        groups: { core: { '': { description: 'Core' } } }
+      })
+    } as unknown as DTCGDocument;
+    const { document } = mergeTokenDocuments(yours, file);
+    const details = (document as Record<string, any>).$extensions[
+      DTF_EXTENSION_KEY
+    ].tokensStudio;
+
+    assert.deepEqual(details.order, ['core', 'light', 'brand']);
+    assert.deepEqual(
+      details.themes.map(({ name }: { name: string }) => name),
+      ['Light', 'Dark, new', 'Brand']
+    );
+    assert.deepEqual(details.remainder.light, {
+      a: { value: '#fff', type: 'color' },
+      b: { value: '#111' }
+    });
+    assert.deepEqual(details.remainder.core, {
+      old: { value: '1', type: 'number' }
+    });
+    assert.deepEqual(details.groups.core[''], {
+      type: 'number',
+      description: 'Core'
+    });
+
+    // Only the file is Tokens Studio: its details come with it
+    assert.deepEqual(
+      (mergeTokenDocuments(BASE, file).document as Record<string, any>)
+        .$extensions[DTF_EXTENSION_KEY].tokensStudio.order,
+      ['light', 'brand']
+    );
   });
 
   it('leaves the documents it was given as they were', () => {

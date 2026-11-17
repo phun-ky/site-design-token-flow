@@ -20,6 +20,7 @@ export type {
   NoteKind,
   SetUse,
   TokensStudioFile,
+  TokensStudioDocument,
   TokensStudioSet,
   TokensStudioTheme
 } from './utils/tokens-studio';

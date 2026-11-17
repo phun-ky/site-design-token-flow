@@ -376,6 +376,29 @@ describe('convertTokensStudio', () => {
       { value: 4, unit: 'px' }
     );
   });
+
+  it('keeps references to a linked set as references, and to others as values (#129)', () => {
+    const file = readTokensStudio({
+      yours: { red: { value: '#ff0000', type: 'color' } },
+      source: { blue: { value: '#0000ff', type: 'color' } },
+      semantic: {
+        text: { value: '{red}', type: 'color' },
+        link: { value: '{blue}', type: 'color' }
+      },
+      $metadata: { tokenSetOrder: ['yours', 'source', 'semantic'] }
+    });
+    const { document, converted } = convertTokensStudio(
+      file,
+      { yours: 'reference', source: 'reference', semantic: 'included' },
+      ['yours']
+    );
+    // Set names are not part of token names
+    const semantic = document as Record<string, any>;
+
+    assert.equal(converted, 2);
+    assert.equal(semantic.text.$value, '{red}');
+    assert.equal(semantic.link.$value.hex, '#0000ff');
+  });
 });
 
 describe('toTokensStudio', () => {

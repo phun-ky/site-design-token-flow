@@ -212,7 +212,13 @@ export const runImportWizard = (
 
     body.setAttribute('aria-busy', 'true');
 
-    const converted = await options.convert({ ...choice, format });
+    const yours = mode === 'add' ? options.yours?.document : null;
+    // When adding, references to your tokens resolve (#129)
+    const converted = await options.convert({
+      ...choice,
+      format,
+      ...(yours && { yours })
+    });
 
     body.removeAttribute('aria-busy');
 
@@ -441,12 +447,28 @@ export const runImportWizard = (
               el('th', { scope: 'col', class: 'demo-number' }, 'Tokens')
             )
           ),
-          el('tbody', {}, ...rows)
+          el(
+            'tbody',
+            {},
+            current.summary.yours !== undefined &&
+              el(
+                'tr',
+                {},
+                el('th', { scope: 'row' }, 'Your tokens'),
+                el('td', {}, 'Reference only'),
+                el(
+                  'td',
+                  { class: 'demo-number' },
+                  String(current.summary.yours)
+                )
+              ),
+            ...rows
+          )
         ),
         el(
           'p',
           { class: 'demo-hint' },
-          'A later set overrides an earlier one. Reference only sets resolve references; their own tokens are not added.'
+          `A later set overrides an earlier one. Reference only sets resolve references; their own tokens are not added.${current.summary.yours === undefined ? '' : ' References to your tokens stay references.'}`
         )
       ),
       el(
@@ -497,8 +519,13 @@ export const runImportWizard = (
           disabled
         });
 
-        input.addEventListener('change', () => {
+        input.addEventListener('change', async () => {
           mode = value;
+
+          // Your tokens resolve references only when adding to them
+          if (current.summary.format === 'tokens-studio')
+            await reconvert({ uses: current.uses });
+
           void prepare();
         });
 

@@ -1,5 +1,8 @@
 import type { DTCGDocument } from '../types/tokens';
 
+import { DTF_EXTENSION_KEY } from './design-tokens';
+import type { TokensStudioDocument } from './tokens-studio';
+
 /**
  * Merges one token document into another (#117): every token of `incoming`
  * is added, or overwrites the token of the same name. Adding one token with
@@ -74,6 +77,67 @@ const groupsOf = (
       : groupsOf(child, [...path, key])
   )
 ];
+/** The Tokens Studio details a converted document keeps for the export */
+const studioOf = (document: Json) =>
+  (
+    (document.$extensions as Json | undefined)?.[DTF_EXTENSION_KEY] as
+      Json | undefined
+  )?.tokensStudio as TokensStudioDocument | undefined;
+const isStudioToken = (node: Json) => 'value' in node || '$value' in node;
+/** Two sets of Tokens Studio tokens in one; `later`'s tokens win */
+const combineSets = (earlier: Json, later: Json): Json =>
+  Object.fromEntries(
+    [...new Set([...Object.keys(earlier), ...Object.keys(later)])].map(
+      (key) => {
+        const [a, b] = [earlier[key], later[key]];
+
+        return [
+          key,
+          isObject(a) && isObject(b) && !isStudioToken(a) && !isStudioToken(b)
+            ? combineSets(a, b)
+            : key in later
+              ? b
+              : a
+        ];
+      }
+    )
+  );
+/**
+ * Both documents' Tokens Studio details in one, for the export (#129): your
+ * sets and themes, then the file's; a set in both gets both sets' tokens,
+ * and a theme in both is the file's.
+ */
+const combineStudio = (
+  yours: TokensStudioDocument | undefined,
+  file: TokensStudioDocument
+): TokensStudioDocument =>
+  yours
+    ? {
+        keyStyle: yours.keyStyle,
+        hasSets: yours.hasSets || file.hasSets,
+        order: [
+          ...yours.order,
+          ...file.order.filter((name) => !yours.order.includes(name))
+        ],
+        themes: [
+          ...yours.themes.map(
+            (theme) => file.themes.find(({ id }) => id === theme.id) ?? theme
+          ),
+          ...file.themes.filter(
+            ({ id }) => !yours.themes.some((theme) => theme.id === id)
+          )
+        ],
+        remainder: combineSets(yours.remainder, file.remainder) as Record<
+          string,
+          Json
+        >,
+        // Per set and group path, each property: the file's on a clash
+        groups: combineSets(yours.groups, file.groups) as Record<
+          string,
+          Record<string, Json>
+        >
+      }
+    : file;
 
 /**
  * Merges `incoming` into a copy of `base`. Groups merge, and take the
@@ -81,7 +145,9 @@ const groupsOf = (
  * `$extensions`; a token of the same name is overwritten, its value, type,
  * description and extensions, and `$root` tokens too. Each incoming token
  * takes the `$type` its own groups gave it, so a group type in one document
- * never changes tokens from the other.
+ * never changes tokens from the other. The rest of the root is `base`'s,
+ * but for the Tokens Studio details both documents keep for the export,
+ * which combine.
  *
  * @param {DTCGDocument} base The tokens you have
  * @param {DTCGDocument} incoming The tokens to add
@@ -169,6 +235,15 @@ export const mergeTokenDocuments = (
 
     node[key] = structuredClone(token);
   });
+
+  const file = studioOf(incoming as Json);
+
+  if (file) {
+    const extensions = ((document.$extensions as Json | undefined) ??= {});
+    const own = ((extensions[DTF_EXTENSION_KEY] as Json | undefined) ??= {});
+
+    own.tokensStudio = structuredClone(combineStudio(studioOf(document), file));
+  }
 
   return { document: document as DTCGDocument, added, overwritten, unchanged };
 };

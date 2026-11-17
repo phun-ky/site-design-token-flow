@@ -682,10 +682,12 @@ const setAt = (root: Json, path: string[], value: unknown) => {
 
 /**
  * Converts a Tokens Studio file to a DTCG 2025.10 document, with the sets
- * used as given, and reports what it did.
+ * used as given, and reports what it did. References to tokens of a `linked`
+ * set stay references, for a document added to tokens that hold them (#129).
  *
  * @param {TokensStudioFile} file The file, from `readTokensStudio`
  * @param {Record<string, SetUse>} uses How each set is used
+ * @param {string[]} [linked] Reference only sets whose tokens references keep
  * @returns {Conversion} The document, how many tokens it has, and notes
  * @example
  * const file = readTokensStudio(json);
@@ -693,7 +695,8 @@ const setAt = (root: Json, path: string[], value: unknown) => {
  */
 export const convertTokensStudio = (
   file: TokensStudioFile,
-  uses: Record<string, SetUse>
+  uses: Record<string, SetUse>,
+  linked: string[] = []
 ): Conversion => {
   const notes: ConversionNote[] = [];
   const note = (name: string, kind: NoteKind, detail: string) =>
@@ -886,7 +889,17 @@ export const convertTokensStudio = (
   entries.forEach((entry) => {
     const { name, set, use, token, type } = entry;
 
-    if (use === 'reference') return keep(set, name, token);
+    if (use === 'reference') {
+      // Its type, so references to it stay references
+      if (linked.includes(set))
+        try {
+          types.set(name, convertValue(type, resolve(name), []).$type);
+        } catch {
+          // Not convertible: references to it take its value, or are left out
+        }
+
+      return keep(set, name, token);
+    }
 
     const changes: string[] = [];
 

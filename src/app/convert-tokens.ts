@@ -1,11 +1,18 @@
-import type { DTCGDocument } from '../tokens';
+import {
+  DTF_EXTENSION_KEY,
+  validateTokens,
+  type DTCGDocument
+} from '../tokens';
 import {
   convertTokensStudio,
   isTokensStudio,
   readTokensStudio,
   setsForTheme,
+  toTokensStudio,
   type Conversion,
-  type SetUse
+  type SetUse,
+  type TokensStudioDocument,
+  type TokensStudioSet
 } from '../tokens/tokens-studio';
 
 import {
@@ -28,6 +35,8 @@ export interface FileSummary {
   hasSets?: boolean;
   sets: { name: string; count: number }[];
   themes: { id: string; name: string; group?: string }[];
+  /** How many of your tokens resolve the file's references, when adding */
+  yours?: number;
 }
 
 /** A theme's id or each set's use, and the format to read the file as */
@@ -36,7 +45,38 @@ export interface ConvertChoice {
   uses?: Record<string, SetUse>;
   /** Overrides the format guessed from the file (#128) */
   format?: FileSummary['format'];
+  /** Your tokens, when adding to them: references to them resolve (#129) */
+  yours?: DTCGDocument;
 }
+
+/**
+ * The set your tokens are read as, while converting a file added to them.
+ * shortcut: a file with a set of this name has it taken for yours; a name
+ * no file can have would need the converter to take an extra set.
+ */
+export const YOUR_TOKENS_SET = 'Your tokens';
+
+/**
+ * Your tokens as a Tokens Studio set, to resolve references only, or null
+ * when they can't be read: the file then converts on its own
+ */
+const yoursAsSet = (document: DTCGDocument): TokensStudioSet | null => {
+  try {
+    const tokens = validateTokens(document).tokens.map(
+      ({ name, $type, $value, value }) => ({ name, $type, $value, value })
+    );
+
+    return {
+      name: YOUR_TOKENS_SET,
+      tokens:
+        (toTokensStudio(tokens, undefined, YOUR_TOKENS_SET)[YOUR_TOKENS_SET] as
+          Record<string, unknown> | undefined) ?? {},
+      count: tokens.length
+    };
+  } catch {
+    return null;
+  }
+};
 
 export interface ConvertedTokens {
   summary: FileSummary;
@@ -102,7 +142,27 @@ export const convertTokenText = (
     file.themes.find(({ id, name }) => (id ?? name) === choice.theme) ??
     (choice.theme === undefined ? file.themes[0] : undefined);
   const uses = choice.uses ?? setsForTheme(file, theme);
-  const conversion = convertTokensStudio(file, uses);
+  const yours = choice.yours ? yoursAsSet(choice.yours) : null;
+  const conversion = yours
+    ? convertTokensStudio(
+        { ...file, sets: [yours, ...file.sets] },
+        { ...uses, [YOUR_TOKENS_SET]: 'reference' },
+        [YOUR_TOKENS_SET]
+      )
+    : convertTokensStudio(file, uses);
+
+  if (yours) {
+    // Your tokens are yours already: none of them goes in the file's export
+    const details = (
+      (conversion.document.$extensions as Record<string, unknown>)[
+        DTF_EXTENSION_KEY
+      ] as { tokensStudio: TokensStudioDocument }
+    ).tokensStudio;
+
+    delete details.remainder[YOUR_TOKENS_SET];
+    delete details.groups[YOUR_TOKENS_SET];
+    details.order = details.order.filter((name) => name !== YOUR_TOKENS_SET);
+  }
 
   return {
     summary: {
@@ -114,7 +174,8 @@ export const convertTokenText = (
         id: id ?? name,
         name,
         ...(group && { group })
-      }))
+      })),
+      ...(yours && { yours: yours.count })
     },
     uses,
     conversion,

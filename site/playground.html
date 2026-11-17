@@ -141,20 +141,21 @@
               <path d="m7 8 5-5 5 5" />
               <path d="M20 15v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4" />
             </svg>
-            <p class="demo-drop-title">Drop a token file here</p>
+            <p class="demo-drop-title">Drop token files here</p>
             <button type="button" id="load-file" class="demo-button">
-              Load a file
+              Load files
             </button>
             <input
               id="file"
               type="file"
               accept=".json,application/json"
-              aria-label="Token file"
+              aria-label="Token files"
+              multiple
               hidden
             />
             <p class="demo-muted demo-drop-hint">
-              DTCG or Tokens Studio JSON up to 2 MB, read in your browser and
-              never uploaded
+              DTCG or Tokens Studio JSON up to 2 MB in all, read in your browser
+              and never uploaded
             </p>
           </div>
           <div id="file-status" class="demo-file-status" role="status"></div>
@@ -380,7 +381,10 @@
     >
       <form method="dialog">
         <div class="demo-wizard-head">
-          <h2 id="import-title">Import <code id="import-name"></code></h2>
+          <h2 id="import-title">
+            Import <code id="import-name"></code
+            ><span id="import-position" class="demo-muted"></span>
+          </h2>
           <ol
             id="import-steps"
             class="demo-wizard-steps"

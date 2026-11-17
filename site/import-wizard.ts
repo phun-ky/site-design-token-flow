@@ -2,7 +2,7 @@
 // theme or sets you choose, and any file can be added to your tokens or
 // replace them, after a review of what changes. Text from the file is only
 // ever set as text, never as markup.
-import type { CheckedTokens } from '../src/app/check-tokens';
+import { writtenTokens, type CheckedTokens } from '../src/app/check-tokens';
 import type {
   ConvertChoice,
   ConvertedTokens,
@@ -14,7 +14,6 @@ import {
   mergeTokenDocuments,
   type DTCGColorValue,
   type DTCGDocument,
-  type FlatDesignToken,
   type Merge
 } from '../src/tokens';
 import type {
@@ -25,6 +24,8 @@ import type {
 
 export interface WizardOptions {
   fileName: string;
+  /** Which of several files this is, such as `2 of 3` (#127) */
+  position?: string;
   /** The file, converted with the first theme or every set */
   first: ConvertedTokens;
   /** Converts the file again with another theme, other sets or format */
@@ -78,13 +79,27 @@ const short = (value: unknown) => {
 /** How many tokens the preview shows; a large file would be slow to list */
 const PREVIEW = 100;
 /** A token's value as written: an alias, a colour as hex or CSS, or JSON */
-const previewValue = ({ $type, $value, value }: FlatDesignToken) =>
-  typeof $value === 'string'
-    ? $value
-    : $type === 'color'
-      ? (colorToHex(value as DTCGColorValue) ??
-        colorToCss(value as DTCGColorValue))
-      : short($value);
+const previewValue = ({
+  $type,
+  $value
+}: {
+  $type?: string;
+  $value: unknown;
+}) => {
+  if (typeof $value === 'string') return $value;
+
+  try {
+    if ($type === 'color')
+      return (
+        colorToHex($value as DTCGColorValue) ??
+        colorToCss($value as DTCGColorValue)
+      );
+  } catch {
+    // Not a valid colour, which the review reports: shown as written
+  }
+
+  return short($value);
+};
 const KINDS: { kind: NoteKind; title: string }[] = [
   { kind: 'math', title: 'Math worked out' },
   { kind: 'resolved', title: 'References inside text resolved' },
@@ -160,6 +175,8 @@ export const runImportWizard = (
   let run = 0;
 
   name.textContent = options.fileName;
+  (dialog.querySelector('#import-position') as HTMLElement).textContent =
+    options.position ? `, file ${options.position}` : '';
 
   const result = (): WizardResult => {
     const adding = mode === 'add' && options.yours?.document && merge;
@@ -244,7 +261,8 @@ export const runImportWizard = (
   };
   /** The first tokens of the file, as they will load, in a scrolling box */
   const preview = () => {
-    const { tokens, problems } = current.checked;
+    const tokens = writtenTokens(current.conversion.document);
+    const { problems } = current.checked;
 
     return [
       el(
@@ -286,7 +304,7 @@ export const runImportWizard = (
                   'tr',
                   {},
                   el('th', { scope: 'row' }, el('code', {}, token.name)),
-                  el('td', {}, token.$type),
+                  el('td', {}, token.$type ?? 'no type'),
                   el('td', {}, el('code', {}, previewValue(token)))
                 )
               )
@@ -297,7 +315,7 @@ export const runImportWizard = (
         ? el(
             'p',
             { class: 'demo-hint' },
-            `${plural(problems.length, 'problem')} found; tokens with problems are not in the preview.`
+            `${plural(problems.length, 'problem')} in the file on its own, such as references to tokens it doesn’t have; the review checks the tokens as they load.`
           )
         : null
     ];

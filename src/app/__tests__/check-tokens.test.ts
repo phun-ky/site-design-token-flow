@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { checkTokenText, countTokens, lineOfProblem } from '../check-tokens';
+import {
+  checkTokenText,
+  countTokens,
+  lineOfProblem,
+  writtenTokens
+} from '../check-tokens';
 
 const VALID = JSON.stringify(
   {
@@ -111,5 +116,31 @@ describe('lineOfProblem', () => {
   it('returns null when it cannot tell', () => {
     assert.equal(lineOfProblem('{}', { path: 'missing', message: '' }), null);
     assert.equal(lineOfProblem('{}', { path: '', message: 'Bad' }), null);
+  });
+});
+
+describe('writtenTokens', () => {
+  it('lists every token as written, valid or not, with its group type (#127)', () => {
+    assert.deepEqual(
+      writtenTokens({
+        $type: 'color',
+        color: {
+          cta: { $value: '{color.blue}' },
+          accent: { $root: { $value: '{color.red}' } },
+          size: { $type: 'dimension', $value: 'not a dimension' }
+        }
+      }),
+      [
+        { name: 'color.cta', $type: 'color', $value: '{color.blue}' },
+        { name: 'color.accent.$root', $type: 'color', $value: '{color.red}' },
+        { name: 'color.size', $type: 'dimension', $value: 'not a dimension' }
+      ]
+    );
+  });
+
+  it('lists nothing for what is not a document', () => {
+    assert.deepEqual(writtenTokens([]), []);
+    assert.deepEqual(writtenTokens(null), []);
+    assert.deepEqual(writtenTokens({ a: 1 }), []);
   });
 });

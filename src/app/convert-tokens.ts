@@ -8,7 +8,11 @@ import {
   type SetUse
 } from '../tokens/tokens-studio';
 
-import { checkTokenText, type CheckedTokens } from './check-tokens';
+import {
+  checkTokenText,
+  writtenTokens,
+  type CheckedTokens
+} from './check-tokens';
 
 /**
  * Reading a token file that may be in the Tokens Studio format (#113,
@@ -73,21 +77,23 @@ export const convertTokenText = (
     : isTokensStudio(json);
 
   if (!studio) {
-    const checked = checkTokenText(text);
+    // Every token it brings, valid or not: one referring to your tokens is
+    // only valid once added to them (#127)
+    const count = writtenTokens(json).length;
 
     return {
       summary: {
         format: 'dtcg',
-        sets: [{ name: 'tokens', count: checked.tokens.length }],
+        sets: [{ name: 'tokens', count }],
         themes: []
       },
       uses: {},
       conversion: {
         document: json as DTCGDocument,
-        converted: checked.tokens.length,
+        converted: count,
         notes: []
       },
-      checked
+      checked: checkTokenText(text)
     };
   }
 

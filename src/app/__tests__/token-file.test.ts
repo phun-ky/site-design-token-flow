@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { MAX_FILE_BYTES, formatBytes, refuseTokenFile } from '../token-file';
+import {
+  MAX_FILE_BYTES,
+  formatBytes,
+  refuseTokenFile,
+  refuseTokenFiles
+} from '../token-file';
 
 describe('refuseTokenFile', () => {
   it('accepts a text file up to the limit, whatever its contents', () => {
@@ -40,5 +45,32 @@ describe('formatBytes', () => {
     assert.equal(formatBytes(10), '1 kB');
     assert.equal(formatBytes(12_800), '13 kB');
     assert.equal(formatBytes(3 * 1024 * 1024), '3.0 MB');
+  });
+});
+
+describe('refuseTokenFiles', () => {
+  it('accepts files that fit, each and together (#127)', () => {
+    const half = { name: 'a.json', size: MAX_FILE_BYTES / 2 };
+
+    assert.equal(refuseTokenFiles([half, { ...half, name: 'b.json' }]), null);
+  });
+
+  it('refuses a file too large on its own, naming it', () => {
+    assert.match(
+      refuseTokenFiles([
+        { name: 'a.json', size: 10 },
+        { name: 'big.json', size: MAX_FILE_BYTES + 1 }
+      ]) ?? '',
+      /^"big\.json"/
+    );
+  });
+
+  it('refuses files too large together', () => {
+    const most = { name: 'a.json', size: MAX_FILE_BYTES - 1 };
+
+    assert.equal(
+      refuseTokenFiles([most, { ...most, name: 'b.json' }]),
+      'These 2 files (4.0 MB) are too large together: the playground keeps token files up to 2.0 MB in all in your browser.'
+    );
   });
 });

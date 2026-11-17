@@ -91,6 +91,17 @@ describe('convertTokenText', () => {
     );
   });
 
+  it("counts a DTCG file's tokens that refer to tokens it doesn't have (#127)", () => {
+    const converted = convertTokenText(
+      JSON.stringify({ cta: { $type: 'color', $value: '{color.blue}' } })
+    );
+
+    assert.equal(converted?.conversion.converted, 1);
+    assert.equal(converted?.summary.sets[0].count, 1);
+    // On its own, the reference doesn't resolve
+    assert.equal(converted?.checked.tokens.length, 0);
+  });
+
   it('returns null for text that is not JSON', () => {
     assert.equal(convertTokenText('{ "a": '), null);
   });

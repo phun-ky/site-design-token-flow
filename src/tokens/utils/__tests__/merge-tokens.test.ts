@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 
 import type { DTCGDocument } from '../../types/tokens';
@@ -113,6 +114,68 @@ describe('mergeTokenDocuments', () => {
     assert.deepEqual(
       overwritten.map(({ name }) => name),
       ['color.accent']
+    );
+  });
+
+  it('keeps $root tokens and the references to them (#125)', () => {
+    const { document, added } = mergeTokenDocuments(BASE, {
+      brand: { $type: 'color', $root: { $value: blue }, dark: { $value: red } },
+      link: { $type: 'color', $value: '{brand.$root}' }
+    } as unknown as DTCGDocument);
+
+    assert.deepEqual(added, ['brand.$root', 'brand.dark', 'link']);
+    assert.deepEqual(validateTokens(document).problems, []);
+  });
+
+  it('keeps group $extends and the tokens it brings in (#125)', () => {
+    const { document } = mergeTokenDocuments(BASE, {
+      base: { $type: 'color', red: { $value: red } },
+      brand: {
+        $extends: '{base}',
+        $description: 'The brand',
+        blue: { $value: blue }
+      },
+      link: { $type: 'color', $value: '{brand.red}' }
+    } as unknown as DTCGDocument);
+    const { tokens, problems } = validateTokens(document);
+
+    assert.deepEqual(problems, []);
+    assert.equal(
+      (document as Record<string, any>).brand.$description,
+      'The brand'
+    );
+    assert.ok(tokens.some(({ name }) => name === 'brand.red'));
+  });
+
+  it('puts a group type only on groups it makes, not on yours', () => {
+    const { document } = mergeTokenDocuments(
+      {
+        size: { s: { $type: 'dimension', $value: { value: 4, unit: 'px' } } }
+      } as unknown as DTCGDocument,
+      {
+        size: { $type: 'number', ratio: { $value: 1.5 } },
+        ratio: { $type: 'number', golden: { $value: 1.618 } }
+      } as unknown as DTCGDocument
+    );
+    const merged = document as Record<string, any>;
+
+    assert.equal(merged.size.$type, undefined);
+    assert.equal(merged.ratio.$type, 'number');
+    assert.deepEqual(validateTokens(document).problems, []);
+  });
+
+  it('merges the showcase into nothing without new problems (#125)', () => {
+    const showcase = JSON.parse(
+      readFileSync(
+        new URL('../../../../site/showcase.tokens.json', import.meta.url),
+        'utf8'
+      )
+    ) as DTCGDocument;
+
+    assert.deepEqual(
+      validateTokens(mergeTokenDocuments({} as DTCGDocument, showcase).document)
+        .problems,
+      validateTokens(showcase).problems
     );
   });
 

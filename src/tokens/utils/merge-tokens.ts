@@ -46,7 +46,7 @@ const tokensOf = (
   const type = node.$type ?? inherited;
 
   return Object.entries(node).flatMap(([key, child]) => {
-    if (key.startsWith('$') || !isObject(child)) return [];
+    if ((key.startsWith('$') && key !== '$root') || !isObject(child)) return [];
 
     if (isToken(child))
       return [
@@ -62,12 +62,26 @@ const tokensOf = (
     return tokensOf(child, [...path, key], type);
   });
 };
+/** The groups of a document, the root first, each before its children */
+const groupsOf = (
+  node: Json,
+  path: string[] = []
+): { path: string[]; group: Json }[] => [
+  { path, group: node },
+  ...Object.entries(node).flatMap(([key, child]) =>
+    key.startsWith('$') || !isObject(child) || isToken(child)
+      ? []
+      : groupsOf(child, [...path, key])
+  )
+];
 
 /**
- * Merges `incoming` into a copy of `base`. Groups merge; a token of the
- * same name is overwritten, its value, type, description and extensions.
- * Each incoming token takes the `$type` its own groups gave it, so a group
- * type in one document never changes tokens from the other.
+ * Merges `incoming` into a copy of `base`. Groups merge, and take the
+ * incoming groups' `$extends`, `$description`, `$deprecated` and
+ * `$extensions`; a token of the same name is overwritten, its value, type,
+ * description and extensions, and `$root` tokens too. Each incoming token
+ * takes the `$type` its own groups gave it, so a group type in one document
+ * never changes tokens from the other.
  *
  * @param {DTCGDocument} base The tokens you have
  * @param {DTCGDocument} incoming The tokens to add
@@ -86,13 +100,13 @@ export const mergeTokenDocuments = (
   const added: string[] = [];
   const overwritten: Overwrite[] = [];
   const unchanged: string[] = [];
-
-  tokensOf(incoming as Json).forEach(({ path, token }) => {
+  /** The group at `path`, made where missing, and the $type it gives */
+  const groupAt = (path: string[]) => {
     let node = document;
-    // The $type a token here would inherit from your groups
     let inherited = document.$type;
+    let created = false;
 
-    path.slice(0, -1).forEach((key, index) => {
+    path.forEach((key, index) => {
       const child = node[key];
 
       // A token where the path needs a group is replaced by the group
@@ -103,12 +117,35 @@ export const mergeTokenDocuments = (
           after: undefined
         });
 
-      if (!isObject(child) || isToken(child)) node[key] = {};
+      created = !isObject(child) || isToken(child);
+
+      if (created) node[key] = {};
 
       node = node[key] as Json;
       inherited = node.$type ?? inherited;
     });
 
+    return { node, inherited, created };
+  };
+
+  // Group properties first, so `$extends` keeps the tokens it brings in
+  // (#125). A $type only lands on a group the merge makes: your tokens in
+  // a group you had keep the type they inherit
+  groupsOf(incoming as Json).forEach(({ path, group }) => {
+    const { node, created } = groupAt(path);
+
+    Object.entries(group).forEach(([key, value]) => {
+      if (
+        key.startsWith('$') &&
+        key !== '$root' &&
+        (key !== '$type' || created)
+      )
+        node[key] = structuredClone(value);
+    });
+  });
+
+  tokensOf(incoming as Json).forEach(({ path, token }) => {
+    const { node, inherited } = groupAt(path.slice(0, -1));
     const key = path[path.length - 1];
     const existing = node[key];
     const name = path.join('.');

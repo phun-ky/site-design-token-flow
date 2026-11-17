@@ -24,6 +24,15 @@ updates:
     open-pull-requests-limit: 5
     allow:
       - dependency-type: direct
+    ignore:
+      # typescript-eslint (8.73.0) supports TypeScript below 6.1 only, and
+      # lint crashes on 7 (#124): lift this once it supports 7
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major']
+      # The types follow the Node version CI and deploy run (24), so code
+      # can't use APIs newer than the runtime (#123): bump them together
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
 
   # Actions are pinned to commit SHAs; this keeps the pins and their version
   # comments up to date

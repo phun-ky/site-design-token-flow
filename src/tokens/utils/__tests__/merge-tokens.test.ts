@@ -179,6 +179,21 @@ describe('mergeTokenDocuments', () => {
     );
   });
 
+  it("keeps your document's root properties, such as Tokens Studio details", () => {
+    const yours = {
+      ...BASE,
+      $extensions: { studio: 'yours' }
+    } as unknown as DTCGDocument;
+    const { document } = mergeTokenDocuments(yours, {
+      $extensions: { studio: 'incoming' },
+      color: { $type: 'color', blue: { $value: blue } }
+    } as unknown as DTCGDocument);
+
+    assert.deepEqual((document as Record<string, any>).$extensions, {
+      studio: 'yours'
+    });
+  });
+
   it('leaves the documents it was given as they were', () => {
     const incoming = {
       color: { $type: 'color', red: { $value: blue } }

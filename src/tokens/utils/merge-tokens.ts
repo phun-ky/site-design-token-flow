@@ -130,8 +130,11 @@ export const mergeTokenDocuments = (
 
   // Group properties first, so `$extends` keeps the tokens it brings in
   // (#125). A $type only lands on a group the merge makes: your tokens in
-  // a group you had keep the type they inherit
+  // a group you had keep the type they inherit. The root is skipped: its
+  // $extensions hold your file's Tokens Studio details, kept for export
   groupsOf(incoming as Json).forEach(({ path, group }) => {
+    if (!path.length) return;
+
     const { node, created } = groupAt(path);
 
     Object.entries(group).forEach(([key, value]) => {

@@ -215,23 +215,29 @@ test.describe('on a touch screen', () => {
     await touch('touchStart', 100);
     for (const spread of [125, 150, 175, 200]) await touch('touchMove', spread);
 
+    // Chrome sends pointer moves once a frame, so the last may come later
+    await expect
+      .poll(async () => (await canvasTransform(page)).scale / before.scale)
+      .toBeCloseTo(2, 1);
+
     const after = await canvasTransform(page);
     const at = (state: typeof before) => ({
       x: (middle.x - state.x) / state.scale,
       y: (middle.y - state.y) / state.scale
     });
 
-    expect(after.scale / before.scale).toBeCloseTo(2, 1);
     expect(await zoomLevel(page)).toBeCloseTo(level * 2, -1);
     expect(at(after).x).toBeCloseTo(at(before).x, 0);
     expect(at(after).y).toBeCloseTo(at(before).y, 0);
 
     // Both fingers moving together pan
     await touch('touchMove', 200, { x: middle.x - 60, y: middle.y - 40 });
+    await expect
+      .poll(async () => (await canvasTransform(page)).x - after.x)
+      .toBeCloseTo(-60, 0);
 
     const panned = await canvasTransform(page);
 
-    expect(panned.x - after.x).toBeCloseTo(-60, 0);
     expect(panned.y - after.y).toBeCloseTo(-40, 0);
     expect(panned.scale).toBe(after.scale);
     await touch('touchEnd', 0);

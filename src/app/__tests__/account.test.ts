@@ -12,13 +12,14 @@ import { afterEach, describe, it, mock } from 'node:test';
 import {
   ACCOUNT_EVENT,
   accountName,
+  deleteAccount,
   freshSession,
   isSignedInOrReturning,
   mountAccount,
   providerLabel,
   type AccountClient
 } from '../account';
-import { SESSION_KEY } from '../supabase';
+import { SESSION_KEY, SUPABASE_KEY, SUPABASE_URL } from '../supabase';
 
 const storageWith = (value: string | null) => ({
   getItem: (key: string) => (key === SESSION_KEY ? value : null),
@@ -30,6 +31,7 @@ const sessionOf = (
   provider = 'github'
 ) =>
   ({
+    access_token: 'token',
     user: { email, user_metadata, app_metadata: { provider } }
   }) as unknown as Session;
 const place = {
@@ -219,5 +221,103 @@ describe('mountAccount', () => {
     assert.deepEqual(texts(root, '.app-account-button'), ['Sign in']);
     assert.deepEqual(texts(second, '.app-account-button'), ['Sign in']);
     assert.equal(error.mock.callCount(), 2);
+  });
+
+  describe('deleting the account', () => {
+    /** localStorage with a document published as u/s.json */
+    const published = () => {
+      const items = new Map<string, string>([
+        [SESSION_KEY, '{}'],
+        [
+          'dtf-demo',
+          JSON.stringify({
+            current: 'a',
+            documents: [{ id: 'a', name: 'A', custom: '{}', link: 'u/s.json' }]
+          })
+        ]
+      ]);
+
+      return {
+        items,
+        getItem: (key: string) => items.get(key) ?? null,
+        setItem: (key: string, value: string) => void items.set(key, value)
+      };
+    };
+    const confirm = () => {
+      const dialog = document.querySelector('dialog') as HTMLDialogElement;
+
+      dialog.returnValue = 'delete';
+      dialog.dispatchEvent(new window.Event('close'));
+    };
+
+    it('asks the Edge Function, as the account', async () => {
+      const request = mock.fn(async () => new Response('{}', { status: 200 }));
+
+      assert.equal(await deleteAccount('token', request), true);
+      assert.deepEqual(request.mock.calls[0].arguments, [
+        `${SUPABASE_URL}/functions/v1/delete-account`,
+        {
+          method: 'POST',
+          headers: { apikey: SUPABASE_KEY, authorization: 'Bearer token' }
+        }
+      ]);
+      assert.equal(
+        await deleteAccount(
+          'token',
+          mock.fn(async () => new Response('{}', { status: 500 }))
+        ),
+        false
+      );
+    });
+
+    it('signs out, and forgets the links, once it is deleted', async () => {
+      const client = fakeClient(sessionOf({ name: 'Some One' }));
+      const storage = published();
+      const root = mountAccount(document.body, {
+        load: async () => client as unknown as AccountClient,
+        storage,
+        place,
+        request: mock.fn(async () => new Response('{}', { status: 200 }))
+      });
+
+      await settle();
+      confirm();
+      await settle();
+
+      assert.deepEqual(client.signOut.mock.calls[0].arguments, [
+        { scope: 'local' }
+      ]);
+      assert.deepEqual(texts(root, '.app-account-button'), ['Sign in']);
+      assert.equal(
+        root.querySelector('.app-account-note')?.textContent,
+        'Your account and its published links are deleted.'
+      );
+      assert.doesNotMatch(storage.items.get('dtf-demo') as string, /link/);
+    });
+
+    it('stays signed in, and says so, when it is not deleted', async () => {
+      mock.method(console, 'error', () => {});
+
+      const client = fakeClient(sessionOf({ name: 'Some One' }));
+      const storage = published();
+      const root = mountAccount(document.body, {
+        load: async () => client as unknown as AccountClient,
+        storage,
+        place,
+        request: mock.fn(async () => new Response('{}', { status: 500 }))
+      });
+
+      await settle();
+      confirm();
+      await settle();
+
+      assert.equal(client.signOut.mock.callCount(), 0);
+      assert.deepEqual(texts(root, '.app-account-button'), ['Some One']);
+      assert.equal(
+        root.querySelector('.app-account-note')?.textContent,
+        'Your account could not be deleted. Try again later.'
+      );
+      assert.match(storage.items.get('dtf-demo') as string, /u\/s\.json/);
+    });
   });
 });

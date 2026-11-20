@@ -126,10 +126,11 @@ the project's Storage policies enforce
 ([`supabase/migrations/`](supabase/migrations/)). "Change link" and
 "Unpublish" delete the file, and the old address stops working.
 
-**Signing out** removes the session from your browser. To have your account
-deleted, with everything published with it, email <alexander@phun-ky.net>;
-deleting it yourself is planned
-([#147](https://github.com/phun-ky/site-design-token-flow/issues/147)).
+**Signing out** removes the session from your browser. **Delete account**, in
+the account menu, deletes your account and every link you published, after
+asking; your tokens in the browser stay. It runs in a Supabase Edge Function
+([`supabase/functions/delete-account/`](supabase/functions/delete-account/)),
+which deletes only the account whose session calls it.
 
 ## Content Security Policy
 
@@ -260,6 +261,11 @@ The project keeps as few secrets as possible:
 Deploying needs no secret: the Deploy workflow uses the short-lived token
 GitHub gives each run, with `pages: write` and `id-token: write` for that job
 only.
+
+The Supabase project's service role key, which deleting an account needs, is
+never in the repository, in GitHub or in the site: Supabase gives it only to
+its Edge Functions, as `SUPABASE_SERVICE_ROLE_KEY`. The site has only the
+publishable key, which allows what the Storage policies allow.
 
 - **Storage:** secrets are kept only as encrypted GitHub Actions secrets, never
   in the repository. Secret scanning with push protection blocks commits that

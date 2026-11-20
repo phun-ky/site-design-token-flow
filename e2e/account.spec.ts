@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
 import { SESSION_KEY, SUPABASE_URL } from '../src/app/supabase';
@@ -116,4 +117,80 @@ test('opens and closes the menu from the keyboard', async ({ page }) => {
   await expect(github).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(github).toBeHidden();
+});
+
+test('deletes the account after asking, and forgets its links', async ({
+  page
+}) => {
+  const calls: { method: string; authorization?: string }[] = [];
+
+  await page.addInitScript(
+    ({ key, value }) => {
+      localStorage.setItem(key, value);
+      localStorage.setItem(
+        'dtf-demo',
+        JSON.stringify({
+          preset: 'custom',
+          current: 'a',
+          documents: [
+            { id: 'a', name: 'Brand', custom: '{}', link: 'u/s.json' }
+          ]
+        })
+      );
+    },
+    { key: SESSION_KEY, value: JSON.stringify(session) }
+  );
+  await page.route(`${SUPABASE_URL}/auth/v1/user`, (route) =>
+    fulfill(route, user)
+  );
+  await page.route(`${SUPABASE_URL}/auth/v1/logout?*`, (route) =>
+    fulfill(route, {}, 204)
+  );
+  await page.route(`${SUPABASE_URL}/functions/v1/delete-account`, (route) => {
+    calls.push({
+      method: route.request().method(),
+      authorization: route.request().headers().authorization
+    });
+
+    return fulfill(route, { deleted: 1 });
+  });
+  await page.goto('playground');
+
+  const dialog = page.getByRole('dialog', { name: 'Delete your account?' });
+
+  await page.getByRole('button', { name: 'Some One' }).click();
+  await page.getByRole('button', { name: 'Delete account' }).click();
+  await expect(dialog).toBeVisible();
+  expect(
+    (
+      await new AxeBuilder({ page })
+        .withTags([
+          'wcag2a',
+          'wcag2aa',
+          'wcag21a',
+          'wcag21aa',
+          'wcag22a',
+          'wcag22aa',
+          'best-practice'
+        ])
+        .analyze()
+    ).violations
+  ).toEqual([]);
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+  expect(calls).toEqual([]);
+
+  await page.getByRole('button', { name: 'Some One' }).click();
+  await page.getByRole('button', { name: 'Delete account' }).click();
+  await dialog.getByRole('button', { name: 'Delete account' }).click();
+
+  await expect(
+    page.getByText('Your account and its published links are deleted.')
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+  expect(calls.filter(({ method }) => method === 'POST')).toEqual([
+    { method: 'POST', authorization: `Bearer ${session.access_token}` }
+  ]);
+  expect(await stored(page, 'dtf-demo')).not.toContain('u/s.json');
+  expect(await stored(page, SESSION_KEY)).toBeNull();
 });

@@ -1,3 +1,4 @@
+import { mountAccount } from './account';
 import { getTheme, setTheme } from './theme';
 
 // The Design Token Flow wave mark
@@ -36,8 +37,9 @@ export const getPageId = (pathname: string): PageId => {
 
 /**
  * Adds the skip link and the global header to the top of the page: the site
- * title and the menu, with a link to each page and the light/dark switch. The
- * skip link, the first Tab stop, goes to the page's `#content`.
+ * title and the menu, with a link to each page, the light/dark switch and the
+ * account menu (#144). The skip link, the first Tab stop, goes to the page's
+ * `#content`.
  *
  * @param {string} [pathname] The current path, to mark the current page
  * @returns {HTMLElement} The header element
@@ -79,6 +81,7 @@ export const mountHeader = (
     sync();
   });
   sync();
+  mountAccount(header.querySelector('.app-header-menu') as HTMLElement);
 
   const skip = document.createElement('a');
 

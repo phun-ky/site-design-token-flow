@@ -37,7 +37,7 @@ Nothing to install: open the site in a current browser. Both pages work with a k
 4. Filter the pills by name or `$type`, and select a pill to see its token, resolved value, the tokens it references and the HTML that renders it, which you can copy. The details open next to the pills, or over the page on a phone; Esc or the close button closes them.
 5. "Export" downloads or copies your tokens as DTCG 2025.10 or as Tokens Studio JSON. Tokens that came from Tokens Studio go back as they came, with their sets, themes, math and modifiers, and your new tokens in the set you choose.
 
-What you type in the playground is saved in your browser, so it is there when you come back, and "Show in the flow" draws it in the flow view. While your edits have problems, the flow shows the last version without. Nothing is sent anywhere: the [security policy](SECURITY.md#security-expectations) lists what the site stores and where.
+What you type in the playground is saved in your browser, so it is there when you come back, and "Show in the flow" draws it in the flow view. Keep several token documents side by side with "New document", and switch between them under "Start from". While your edits have problems, the flow shows the last version without. Nothing is sent anywhere: the [security policy](SECURITY.md#security-expectations) lists what the site stores and where.
 
 ## Development
 

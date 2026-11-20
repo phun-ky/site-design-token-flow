@@ -55,8 +55,9 @@ What you can rely on:
   or stores a password. What signing in stores is under [Privacy](#privacy).
 - **Your settings and tokens stay in your browser.** The light or dark theme
   choice is kept in `localStorage` (`dtf-theme`). The pill playground keeps the
-  chosen preset, the token JSON you edit there and its last version without
-  problems (`dtf-demo`), which the flow view reads to draw your tokens. A token
+  chosen preset and your token documents, each with its name, the JSON you
+  edit and its last version without problems (`dtf-demo`); the flow view reads
+  the current one to draw your tokens. A token
   file you load is read in the browser and kept the same way, never uploaded.
   When you sign in, the session is kept too
   (`sb-hcdkilwcquhiiwfsrmzy-auth-token`). Nothing else is stored, and clearing

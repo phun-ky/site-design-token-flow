@@ -4,9 +4,14 @@ import { describe, it } from 'node:test';
 import { describeFlowSource } from '../flow-source';
 import {
   STORAGE_KEY,
+  addDocument,
   browserStorage,
   chooseFlowTokens,
+  deleteDocument,
+  listDocuments,
   readSaved,
+  renameDocument,
+  switchDocument,
   writeSaved,
   type TokenStorage
 } from '../saved-tokens';
@@ -113,8 +118,10 @@ describe('writeSaved', () => {
     assert.equal(writeSaved(storage, { valid: VALID }), true);
     assert.deepEqual(JSON.parse(storage.items.get(STORAGE_KEY) as string), {
       preset: 'custom',
-      custom: VALID,
-      valid: VALID
+      current: 'yours',
+      documents: [
+        { id: 'yours', name: 'Your tokens', custom: VALID, valid: VALID }
+      ]
     });
   });
 
@@ -173,8 +180,136 @@ describe('chooseFlowTokens', () => {
     assert.deepEqual(chooseFlowTokens(memory({ custom: VALID }), true), {
       kind: 'example',
       reason: 'chosen',
-      yours: 2
+      yours: 2,
+      name: 'Your tokens'
     });
+  });
+
+  it('shows the current document, with its name', () => {
+    const storage = memory({
+      current: 'b',
+      documents: [
+        { id: 'a', name: 'A', custom: OTHER },
+        { id: 'b', name: 'Brand', custom: VALID }
+      ]
+    });
+    const flow = chooseFlowTokens(storage, false);
+
+    assert.ok(flow.kind === 'yours');
+    assert.equal(flow.name, 'Brand');
+    assert.equal(flow.tokens.length, 2);
+    assert.equal(describeFlowSource(flow, 201).options[0].label, 'Brand');
+  });
+});
+
+describe('documents', () => {
+  it('reads state saved before documents as the first document', () => {
+    const storage = memory({ preset: 'custom', custom: VALID, valid: OTHER });
+
+    assert.deepEqual(listDocuments(storage), {
+      documents: [
+        { id: 'yours', name: 'Your tokens', custom: VALID, valid: OTHER }
+      ],
+      current: 'yours'
+    });
+    assert.deepEqual(readSaved(storage), {
+      preset: 'custom',
+      custom: VALID,
+      valid: OTHER
+    });
+  });
+
+  it('lists the first document, empty, before anything is saved', () => {
+    assert.deepEqual(listDocuments(memory()), {
+      documents: [{ id: 'yours', name: 'Your tokens' }],
+      current: 'yours'
+    });
+    assert.deepEqual(listDocuments(null).current, 'yours');
+  });
+
+  it('leaves out documents that are not what it expects', () => {
+    const storage = memory({
+      current: 'gone',
+      documents: [
+        { id: 'a', name: 'A' },
+        { id: 1, name: 'B' },
+        { id: 'c', name: 'C', custom: 2 },
+        null
+      ]
+    });
+
+    assert.deepEqual(listDocuments(storage), {
+      documents: [{ id: 'a', name: 'A' }],
+      current: 'a'
+    });
+  });
+
+  it('adds an empty document with a free name, and makes it current', () => {
+    const storage = memory({ custom: VALID });
+    const added = addDocument(storage);
+
+    assert.equal(added?.name, 'Your tokens 2');
+    assert.equal(added?.custom, '{}');
+    assert.equal(listDocuments(storage).current, added?.id);
+    assert.equal(addDocument(storage)?.name, 'Your tokens 3');
+    assert.deepEqual(readSaved(storage), { custom: '{}' });
+    assert.equal(addDocument(null), null);
+  });
+
+  it('keeps the first document when adding to nothing saved', () => {
+    const storage = memory();
+
+    addDocument(storage);
+
+    assert.deepEqual(
+      listDocuments(storage).documents.map(({ name }) => name),
+      ['Your tokens', 'Your tokens 2']
+    );
+  });
+
+  it('writes to the current document only', () => {
+    const storage = memory({ custom: VALID });
+    const added = addDocument(storage);
+
+    writeSaved(storage, { custom: OTHER });
+    switchDocument(storage, 'yours');
+
+    assert.deepEqual(readSaved(storage), { custom: VALID });
+    assert.equal(
+      listDocuments(storage).documents.find(({ id }) => id === added?.id)
+        ?.custom,
+      OTHER
+    );
+  });
+
+  it('switches only to a document that exists', () => {
+    const storage = memory({ custom: VALID });
+
+    assert.equal(switchDocument(storage, 'nope'), false);
+    assert.equal(listDocuments(storage).current, 'yours');
+  });
+
+  it('renames, keeping the name when the new one is blank', () => {
+    const storage = memory({ custom: VALID });
+
+    assert.equal(renameDocument(storage, 'yours', '  Brand  '), true);
+    assert.equal(renameDocument(storage, 'yours', '   '), false);
+    assert.equal(renameDocument(storage, 'nope', 'X'), false);
+    assert.equal(listDocuments(storage).documents[0].name, 'Brand');
+  });
+
+  it('deletes, making the first one left current', () => {
+    const storage = memory({ custom: VALID });
+    const added = addDocument(storage);
+
+    assert.equal(deleteDocument(storage, added?.id as string), true);
+    assert.equal(listDocuments(storage).current, 'yours');
+    deleteDocument(storage, 'yours');
+    assert.deepEqual(listDocuments(storage), {
+      documents: [{ id: 'yours', name: 'Your tokens' }],
+      current: 'yours'
+    });
+    assert.deepEqual(readSaved(storage), {});
   });
 });
 

@@ -22,6 +22,14 @@ const STATES: {
 }[] = [
   ...PAGES.map(({ name, path }) => ({ name, path })),
   {
+    name: 'playground with two documents',
+    path: 'playground',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'New document' }).click();
+      await expect(page.getByLabel('Document name')).toBeVisible();
+    }
+  },
+  {
     name: 'flow with the account menu open',
     path: '',
     prepare: async (page) => {

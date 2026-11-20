@@ -6,29 +6,34 @@ this file are made in pull requests like any other. Individual pieces of work
 are tracked as
 [GitHub issues](https://github.com/phun-ky/site-design-token-flow/issues).
 
-## Planned
+## Shipped
 
 ### Published links for Tokens Studio
 
 The Tokens Studio plugin for Figma can sync tokens from a URL, read only, and
-shows when they have changed. You'll be able to sign in with GitHub, Google or Figma
-and publish the tokens you edit in the playground as such a URL, in Tokens
-Studio's format, so designers pull your latest tokens into Figma.
+shows when they have changed. Sign in with GitHub or Google in the playground
+and publish the tokens you edit as such a URL, in Tokens Studio's format, so
+designers pull your latest tokens into Figma. Signing in with Figma follows
+once Figma approves the app.
 
-- **Opt in.** The site works as it does now without signing in, and nothing
-  leaves your browser until you publish a link. Visitors who don't sign in load
+- **Opt in.** The site works as before without signing in, and nothing leaves
+  your browser until you publish a link. Visitors who don't sign in load
   nothing from other hosts.
 - **What is stored:** the tokens you publish, readable by anyone with the link,
   and your account's id and email from GitHub, Google or Figma. It is kept with
   [Supabase](https://supabase.com), in the EU (Ireland). You can unpublish a
   link, or delete your account and everything published with it.
 - **Up to 3 links**, one per token document in the playground. Once a link is
-  published, your edits update it as you make them.
+  published, your edits update it as you make them, and a link published on
+  another device can be opened by name.
+- **Documents** can be deleted, with undo for 10 seconds, and edits with
+  problems can be reverted to the last version without them.
 
-The steps are tracked in
-[#148](https://github.com/phun-ky/site-design-token-flow/issues/148). The
-security policy and the privacy details change with the pull requests that
-ship each step.
+The steps were tracked in
+[#148](https://github.com/phun-ky/site-design-token-flow/issues/148), and the
+[security policy](SECURITY.md) describes what is stored and how.
+
+## Planned
 
 ### The pill renderer as its own package
 

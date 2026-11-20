@@ -116,8 +116,18 @@ it serves, as described in [Supabase's privacy policy](https://supabase.com/priv
 Only the maintainer can see accounts, in Supabase's dashboard. The site shows
 your name and email address only to you, in the account menu.
 
+**When you publish a link** for Tokens Studio, the document's tokens, as
+Tokens Studio JSON, are kept in the same Supabase project, at an address with
+your account's id and a random share id. Anyone with the link can read them,
+and it is cached for up to a minute; nobody can list or find links they
+haven't been given. Only you can change or delete your links, up to 3, which
+the project's Storage policies enforce
+([`supabase/migrations/`](supabase/migrations/)). "Change link" and
+"Unpublish" delete the file, and the old address stops working.
+
 **Signing out** removes the session from your browser. To have your account
-deleted, email <alexander@phun-ky.net>; deleting it yourself is planned
+deleted, with everything published with it, email <alexander@phun-ky.net>;
+deleting it yourself is planned
 ([#147](https://github.com/phun-ky/site-design-token-flow/issues/147)).
 
 ## Content Security Policy

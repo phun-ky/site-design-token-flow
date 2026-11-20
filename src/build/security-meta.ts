@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 
+import { SUPABASE_URL } from '../app/supabase';
+
 /**
  * Security `<meta>` tags for the built pages. GitHub Pages can't send response
  * headers, so the Content Security Policy and the referrer policy go in each
@@ -35,7 +37,8 @@ export const getInlineScripts = (html: string): string[] =>
  * scripts (plus the hashed inline ones) and styles. `style` attributes are
  * allowed, since the pills set their swatch colours with them. Images and
  * fonts (the token fonts) come from the site too; nothing else may load, so a
- * token value can't fetch from another host.
+ * token value can't fetch from another host. The one connection allowed is to
+ * the Supabase project, which only signed in visitors make (#144).
  *
  * @param {string[]} scriptHashes Hash sources of the inline scripts
  * @returns {string} The policy
@@ -48,6 +51,7 @@ export const contentSecurityPolicy = (scriptHashes: string[]): string =>
     `style-src-attr ${keyword('unsafe-inline')}`,
     `img-src ${keyword('self')}`,
     `font-src ${keyword('self')}`,
+    `connect-src ${SUPABASE_URL}`,
     `base-uri ${keyword('none')}`,
     `form-action ${keyword('none')}`
   ].join('; ');

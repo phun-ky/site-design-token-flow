@@ -77,6 +77,7 @@
   },
   "dependencies": {
     "@phun-ky/arclace": "^1.0.0",
+    "@supabase/auth-js": "^2.119.0",
     "shiki": "^4.5.0"
   },
   "overrides": {

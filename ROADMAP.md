@@ -11,7 +11,7 @@ are tracked as
 ### Published links for Tokens Studio
 
 The Tokens Studio plugin for Figma can sync tokens from a URL, read only, and
-shows when they have changed. You'll be able to sign in with GitHub or Google
+shows when they have changed. You'll be able to sign in with GitHub, Google or Figma
 and publish the tokens you edit in the playground as such a URL, in Tokens
 Studio's format, so designers pull your latest tokens into Figma.
 
@@ -19,7 +19,7 @@ Studio's format, so designers pull your latest tokens into Figma.
   leaves your browser until you publish a link. Visitors who don't sign in load
   nothing from other hosts.
 - **What is stored:** the tokens you publish, readable by anyone with the link,
-  and your account's id and email from GitHub or Google. It is kept with
+  and your account's id and email from GitHub, Google or Figma. It is kept with
   [Supabase](https://supabase.com), in the EU (Ireland). You can unpublish a
   link, or delete your account and everything published with it.
 - **Up to 3 links**, one per token document in the playground. Once a link is

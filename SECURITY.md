@@ -2,8 +2,10 @@
 
 Design Token Flow is a static website: the code in this repository is built into
 plain HTML, CSS and JavaScript that show design tokens and how they relate.
-There is no server, no account and no database. Every merge to `main` is
-deployed to GitHub Pages, at <https://phun-ky.net/site-design-token-flow/>.
+There is no server of its own. Signing in, which is optional, goes through
+[Supabase](https://supabase.com) (see [Privacy](#privacy)). Every merge to
+`main` is deployed to GitHub Pages, at
+<https://phun-ky.net/site-design-token-flow/>.
 
 ## Supported Versions
 
@@ -45,20 +47,31 @@ security problem.
 
 What you can rely on:
 
-- **No accounts and nothing stored on a server.** The site has no backend and
-  makes no network requests of its own: it shows the token file it is built
-  with, or the tokens you edit in the playground, from your browser.
+- **Nothing stored on a server unless you sign in.** The site has no backend
+  of its own. Without signing in it makes no network requests of its own: it
+  shows the token file it is built with, or the tokens you edit in the
+  playground, from your browser. Signing in is optional and only with GitHub,
+  Google or Figma; email and password sign in is off, so the site never sees
+  or stores a password. What signing in stores is under [Privacy](#privacy).
 - **Your settings and tokens stay in your browser.** The light or dark theme
   choice is kept in `localStorage` (`dtf-theme`). The pill playground keeps the
   chosen preset, the token JSON you edit there and its last version without
   problems (`dtf-demo`), which the flow view reads to draw your tokens. A token
   file you load is read in the browser and kept the same way, never uploaded.
-  Nothing else is stored, and clearing the site's data removes it.
+  When you sign in, the session is kept too
+  (`sb-hcdkilwcquhiiwfsrmzy-auth-token`). Nothing else is stored, and clearing
+  the site's data removes it.
 - **Nothing is loaded from other hosts.** Scripts, styles and the IBM Plex
   Sans font files the font tokens describe come from the site itself; the
   site's own text uses the system's fonts. The Content Security Policy below
   enforces this in the browser, and the Website checks in CI fail on any
   request to another origin ([`e2e/network.spec.ts`](e2e/network.spec.ts)).
+  The one exception is the Supabase project, which the site connects to only
+  when you sign in, or have signed in before.
+- **Sign in uses PKCE.** The provider sends back a one-time code that only
+  works with a verifier kept in your browser, never the session itself, and
+  the code is removed from the address bar once it is used
+  ([`e2e/account.spec.ts`](e2e/account.spec.ts)).
 - **No referrer is sent.** Each page has `<meta name="referrer"
 content="no-referrer">`.
 - **Token values can't run code.** Every value rendered into the page is escaped
@@ -83,8 +96,28 @@ What you can't rely on yet:
   to send headers, and some protections can't be set from a `<meta>` tag: the
   site can be framed by other sites (`frame-ancestors`), there is no
   `X-Content-Type-Options`, no HSTS for the custom domain (HTTP does redirect to
-  HTTPS), and no reporting of policy violations. The site has no account, form
-  or action to trick someone into, which limits what framing could do.
+  HTTPS), and no reporting of policy violations. A framing site could at most
+  trick someone into opening the sign in menu or signing out; the providers'
+  own sign in pages refuse to be framed.
+
+## Privacy
+
+**Without signing in**, nothing about you leaves your browser: the site sends
+nothing anywhere, and what it keeps is listed under
+[Security Expectations](#security-expectations). GitHub Pages serves the site,
+under [GitHub's privacy statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement).
+
+**When you sign in** with GitHub, Google or Figma, the site's Supabase
+project, in the EU (Ireland, `eu-west-1`), keeps your account: an id, your
+email address, and the name and picture address the provider shares, which
+provider you used, and when you signed in. Supabase also logs the requests
+it serves, as described in [Supabase's privacy policy](https://supabase.com/privacy).
+Only the maintainer can see accounts, in Supabase's dashboard. The site shows
+your name and email address only to you, in the account menu.
+
+**Signing out** removes the session from your browser. To have your account
+deleted, email <alexander@phun-ky.net>; deleting it yourself is planned
+([#147](https://github.com/phun-ky/site-design-token-flow/issues/147)).
 
 ## Content Security Policy
 
@@ -96,7 +129,8 @@ built page by [`e2e/security.spec.ts`](e2e/security.spec.ts)):
 ```text
 default-src 'none'; script-src 'self' 'sha256-…'; style-src 'self';
 style-src-attr 'unsafe-inline'; img-src 'self'; font-src 'self';
-base-uri 'none'; form-action 'none'
+connect-src https://hcdkilwcquhiiwfsrmzy.supabase.co; base-uri 'none';
+form-action 'none'
 ```
 
 - **Scripts** come only from the site. The one inline script, which applies the
@@ -110,8 +144,10 @@ base-uri 'none'; form-action 'none'
 - **Images and fonts** come only from the site. The fonts are the files the
   font tokens list, so a token file can't make the page fetch a font from
   another host.
-- **Everything else** is blocked, including connections and frames from any
-  host, and `<base>` and form targets.
+- **Connections** go only to the Supabase project, for signing in. The site
+  makes them only when you sign in, or have signed in before.
+- **Everything else** is blocked, including frames from any host, and
+  `<base>` and form targets.
 
 The policy is added only to the build. `npm run dev` runs without it, since Vite
 injects styles there. The 404 page
@@ -121,12 +157,15 @@ scripts.
 
 ## Dependencies
 
-**Choosing them.** The site bundles two runtime libraries:
+**Choosing them.** The site bundles three runtime libraries:
 [`@phun-ky/arclace`](https://www.npmjs.com/package/@phun-ky/arclace), which
-draws the lines between tokens, and [`shiki`](https://shiki.style), which
+draws the lines between tokens, [`shiki`](https://shiki.style), which
 highlights code in the playground (only its core, the JavaScript regular
 expression engine and the JSON and HTML grammars, loaded after the page;
-[#76](https://github.com/phun-ky/site-design-token-flow/issues/76)).
+[#76](https://github.com/phun-ky/site-design-token-flow/issues/76)), and
+[`@supabase/auth-js`](https://www.npmjs.com/package/@supabase/auth-js), for
+signing in, loaded only when you sign in or have signed in before
+([#142](https://github.com/phun-ky/site-design-token-flow/issues/142#issuecomment-7038507945)).
 Everything else is a development dependency. A
 new runtime dependency is discussed in an issue first, and must be widely used,
 actively maintained and under an OSI-approved licence compatible with MIT.

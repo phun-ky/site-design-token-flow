@@ -16,11 +16,17 @@ import { formatHtml } from '../src/app/format-html';
 import { mountHeader } from '../src/app/header';
 import type { Colorize } from '../src/app/highlight';
 import {
+  addDocument,
   browserStorage,
   chooseFlowTokens,
+  deleteDocument,
+  listDocuments,
   readSaved,
+  renameDocument,
+  switchDocument,
   writeSaved,
-  type Preset
+  type Preset,
+  type SavedDocument
 } from '../src/app/saved-tokens';
 import { mountSidebarCollapse } from '../src/app/sidebar';
 import {
@@ -54,11 +60,19 @@ const $ = <T extends HTMLElement>(selector: string) =>
 const sourceEl = $<HTMLTextAreaElement>('#source');
 const sourceBoxEl = $<HTMLElement>('.demo-source');
 const sourceCodeEl = $<HTMLElement>('.demo-source-code');
-const presetEls = [
+// The presets and your documents, which change as you add and delete them
+const presetEls = () => [
   ...document.querySelectorAll<HTMLInputElement>('input[name="preset"]')
 ];
+const sourcesEl = $<HTMLFieldSetElement>('.demo-sources');
 const bundledCountEl = $<HTMLSpanElement>('#bundled-count');
-const customCountEl = $<HTMLSpanElement>('#custom-count');
+const documentsEl = $<HTMLDivElement>('#documents');
+const documentEl = $<HTMLDivElement>('#document');
+const documentNameEl = $<HTMLInputElement>('#document-name');
+const newDocumentEl = $<HTMLButtonElement>('#new-document');
+const deleteDocumentEl = $<HTMLButtonElement>('#delete-document');
+const deleteEl = $<HTMLDialogElement>('#delete');
+const deleteNameEl = $<HTMLSpanElement>('#delete-name');
 const prefixEl = $<HTMLInputElement>('#prefix');
 const filterEl = $<HTMLInputElement>('#filter');
 const problemsEl = $<HTMLElement>('#error');
@@ -105,9 +119,55 @@ const escape = (value: string) =>
 const plural = (count: number, word: string) =>
   `${count} ${word}${count === 1 ? '' : 's'}`;
 const preset = (): Preset =>
-  (presetEls.find((input) => input.checked)?.value as Preset) ?? 'showcase';
-const setPreset = (value: Preset) =>
-  presetEls.forEach((input) => (input.checked = input.value === value));
+  (presetEls().find((input) => input.checked)?.value as Preset) ?? 'showcase';
+/** Checks a preset, or for your tokens the current document */
+const setPreset = (value: Preset) => {
+  const { documents, current } = listDocuments(store);
+
+  presetEls().forEach(
+    (input) =>
+      (input.checked =
+        input.value === value &&
+        (value !== 'custom' || input.dataset.document === current))
+  );
+  documentEl.hidden = value !== 'custom';
+  documentNameEl.value = documents.find(({ id }) => id === current)?.name ?? '';
+};
+/** What a document's option says about it */
+const documentDetail = (document: SavedDocument) =>
+  !store
+    ? 'Your browser blocks storage, so they are not kept'
+    : document.custom === undefined
+      ? 'None yet: type, paste or load a file'
+      : 'Saved in this browser';
+/** An option for each of your documents, and the current one's name */
+const renderDocuments = () => {
+  const { documents } = listDocuments(store);
+  const checked = preset();
+
+  documentsEl.replaceChildren(
+    ...documents.map((saved) => {
+      const label = document.createElement('label');
+      const input = document.createElement('input');
+      const text = document.createElement('span');
+      const detail = document.createElement('span');
+
+      label.className = 'demo-source-option';
+      input.type = 'radio';
+      input.name = 'preset';
+      input.value = 'custom';
+      input.dataset.document = saved.id;
+      detail.className = 'demo-muted';
+      detail.dataset.detail = saved.id;
+      detail.textContent = documentDetail(saved);
+      text.append(saved.name, detail);
+      label.append(input, text);
+
+      return label;
+    })
+  );
+  setPreset(checked);
+};
 
 // Syntax highlighting, once Shiki has loaded; plain text until then
 let colorize: Colorize | null = null;
@@ -268,13 +328,15 @@ const showProblems = () => {
 };
 /** What the sidebar says about your tokens, and whether they are saved */
 const showSaved = () => {
-  const saved = readSaved(store);
+  // In place, so focus stays on an option while you move between them
+  for (const saved of listDocuments(store).documents) {
+    const detail = documentsEl.querySelector(
+      `[data-detail="${CSS.escape(saved.id)}"]`
+    );
 
-  customCountEl.textContent = !store
-    ? 'Your browser blocks storage, so they are not kept'
-    : saved.custom === undefined
-      ? 'None yet: type, paste or load a file'
-      : 'Saved in this browser';
+    if (detail) detail.textContent = documentDetail(saved);
+  }
+
   savedEl.textContent =
     preset() !== 'custom'
       ? 'Editing it starts your own tokens'
@@ -520,9 +582,72 @@ sourceEl.addEventListener('input', () => {
   window.clearTimeout(parseTimer);
   parseTimer = window.setTimeout(() => void parse(), 250);
 });
-presetEls.forEach((input) =>
-  input.addEventListener('change', () => loadPreset(input.value as Preset))
-);
+sourcesEl.addEventListener('change', (event) => {
+  const input = event.target as HTMLInputElement;
+
+  if (input.name !== 'preset') return;
+
+  if (input.dataset.document) switchDocument(store, input.dataset.document);
+
+  loadPreset(input.value as Preset);
+});
+newDocumentEl.addEventListener('click', () => {
+  const added = addDocument(store);
+
+  if (!added) {
+    announce('Your browser blocks storage, so a new document is not kept');
+
+    return;
+  }
+
+  renderDocuments();
+  loadPreset('custom');
+  announce(`Added ${added.name}`);
+  documentNameEl.focus();
+  documentNameEl.select();
+});
+documentNameEl.addEventListener('change', () => {
+  renameDocument(store, listDocuments(store).current, documentNameEl.value);
+  // A blank name keeps the old one
+  renderDocuments();
+});
+
+/** Deletes the current document, and shows the one that is current then */
+const removeDocument = () => {
+  const { documents, current } = listDocuments(store);
+  const name = documents.find(({ id }) => id === current)?.name ?? '';
+
+  deleteDocument(store, current);
+  renderDocuments();
+  loadPreset('custom');
+  announce(`Deleted ${name}`);
+  presetEls()
+    .find((input) => input.checked)
+    ?.focus();
+};
+
+deleteDocumentEl.addEventListener('click', () => {
+  const { documents, current } = listDocuments(store);
+  const saved = documents.find(({ id }) => id === current);
+
+  // Only ask when there are tokens to lose
+  if ((saved?.custom ?? '{}').trim() === '{}') {
+    removeDocument();
+
+    return;
+  }
+
+  deleteNameEl.textContent = `"${saved?.name}"`;
+  deleteEl.returnValue = '';
+  deleteEl.showModal();
+});
+deleteEl.addEventListener('close', () => {
+  if (deleteEl.returnValue === 'delete') removeDocument();
+});
+// The backdrop cancels, like Esc and Cancel
+deleteEl.addEventListener('click', (event) => {
+  if (event.target === deleteEl) deleteEl.close('cancel');
+});
 
 /**
  * Says what happened to a file, or how far loading it has come, under the
@@ -1000,6 +1125,7 @@ bundledCountEl.textContent = plural(
   countTokens(JSON.stringify(bundledTokens)),
   'token'
 );
+renderDocuments();
 loadPreset(readSaved(store).preset ?? 'showcase');
 
 // Shiki loads after the page, in its own chunk; the page works without it

@@ -47,37 +47,141 @@ export const browserStorage = (): TokenStorage | null => {
 
 const isString = (value: unknown): value is string => typeof value === 'string';
 
+/** A token document in the playground (#149), kept in this browser */
+export interface SavedDocument {
+  id: string;
+  name: string;
+  /** The JSON you are editing, problems and all */
+  custom?: string;
+  /** The last version of `custom` without problems and with tokens */
+  valid?: string;
+}
+
 /**
- * Reads the saved state. Anything saved that isn't what this version
- * expects, such as data from an older version or edited by hand, is left out.
- *
- * @param {TokenStorage | null} storage Where it is saved
- * @returns {SavedState} The state, empty when nothing usable is saved
+ * The document you have before making any. State saved before documents
+ * existed is read as this one, so nobody loses their tokens.
  */
-export const readSaved = (storage: TokenStorage | null): SavedState => {
+export const FIRST_DOCUMENT: SavedDocument = {
+  id: 'yours',
+  name: 'Your tokens'
+};
+
+interface Stored {
+  preset?: Preset;
+  /** The document the playground edits, and the flow view shows */
+  current?: string;
+  documents: SavedDocument[];
+}
+
+const isDocument = (value: unknown): value is SavedDocument => {
+  const { id, name, custom, valid } = (value ?? {}) as Record<string, unknown>;
+
+  return (
+    isString(id) &&
+    isString(name) &&
+    (custom === undefined || isString(custom)) &&
+    (valid === undefined || isString(valid))
+  );
+};
+/**
+ * Reads everything saved. Anything that isn't what this version expects,
+ * such as data edited by hand, is left out.
+ */
+const readStored = (storage: TokenStorage | null): Stored => {
   let saved: unknown;
 
   try {
     saved = JSON.parse(storage?.getItem(STORAGE_KEY) ?? '{}');
   } catch {
-    return {};
+    return { documents: [] };
   }
 
-  if (typeof saved !== 'object' || saved === null) return {};
+  if (typeof saved !== 'object' || saved === null) return { documents: [] };
 
-  const { preset, custom, valid } = saved as Record<string, unknown>;
+  const { preset, current, documents, custom, valid } = saved as Record<
+    string,
+    unknown
+  >;
+
+  let list: SavedDocument[] = [];
+
+  if (Array.isArray(documents)) {
+    list = documents.filter(isDocument).map(({ id, name, custom, valid }) => ({
+      id,
+      name,
+      ...(custom !== undefined && { custom }),
+      ...(valid !== undefined && { valid })
+    }));
+  } else if (isString(custom) || isString(valid)) {
+    // Saved before there were documents: one document
+    list = [
+      {
+        ...FIRST_DOCUMENT,
+        ...(isString(custom) && { custom }),
+        ...(isString(valid) && { valid })
+      }
+    ];
+  }
 
   return {
     ...(['showcase', 'bundled', 'custom'].includes(preset as string) && {
       preset: preset as Preset
     }),
-    ...(isString(custom) && { custom }),
-    ...(isString(valid) && { valid })
+    current: list.some((document) => document.id === current)
+      ? (current as string)
+      : list[0]?.id,
+    documents: list
+  };
+};
+const writeStored = (storage: TokenStorage | null, stored: Stored) => {
+  if (!storage) return false;
+
+  try {
+    storage.setItem(STORAGE_KEY, JSON.stringify(stored));
+
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Your documents, and which one is current. With none saved yet, the first
+ * document, empty.
+ *
+ * @param {TokenStorage | null} storage Where they are saved
+ * @returns {{ documents: SavedDocument[]; current: string }} The documents
+ */
+export const listDocuments = (
+  storage: TokenStorage | null
+): { documents: SavedDocument[]; current: string } => {
+  const { documents, current } = readStored(storage);
+
+  return documents.length > 0 && current
+    ? { documents, current }
+    : { documents: [{ ...FIRST_DOCUMENT }], current: FIRST_DOCUMENT.id };
+};
+
+/**
+ * Reads the saved state: the preset, and the current document's JSON.
+ *
+ * @param {TokenStorage | null} storage Where it is saved
+ * @returns {SavedState} The state, empty when nothing usable is saved
+ */
+export const readSaved = (storage: TokenStorage | null): SavedState => {
+  const { preset, current, documents } = readStored(storage);
+  const document = documents.find(({ id }) => id === current);
+
+  return {
+    ...(preset && { preset }),
+    ...(document?.custom !== undefined && { custom: document.custom }),
+    ...(document?.valid !== undefined && { valid: document.valid })
   };
 };
 
 /**
- * Saves part of the state, keeping the rest.
+ * Saves part of the state, keeping the rest: the preset, or the current
+ * document's JSON.
  *
  * @param {TokenStorage | null} storage Where to save it
  * @param {SavedState} patch What to change
@@ -89,16 +193,123 @@ export const writeSaved = (
 ): boolean => {
   if (!storage) return false;
 
-  try {
-    storage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ ...readSaved(storage), ...patch })
-    );
+  const stored = readStored(storage);
+  const { preset, ...json } = patch;
 
-    return true;
-  } catch {
-    return false;
+  if (preset) stored.preset = preset;
+
+  if (Object.keys(json).length > 0) {
+    let document = stored.documents.find(({ id }) => id === stored.current);
+
+    if (!document) {
+      document = { ...FIRST_DOCUMENT };
+      stored.documents.push(document);
+      stored.current = document.id;
+    }
+
+    Object.assign(document, json);
   }
+
+  return writeStored(storage, stored);
+};
+
+/** The documents as listed, saved, so changes to them are kept */
+const storedDocuments = (storage: TokenStorage | null): Stored => {
+  const stored = readStored(storage);
+  const { documents, current } = listDocuments(storage);
+
+  return { ...stored, documents, current };
+};
+
+/**
+ * Adds an empty document and makes it current.
+ *
+ * @param {TokenStorage | null} storage Where to save it
+ * @returns {SavedDocument | null} The document, or null when it can't be saved
+ */
+export const addDocument = (
+  storage: TokenStorage | null
+): SavedDocument | null => {
+  const stored = storedDocuments(storage);
+  const names = new Set(stored.documents.map(({ name }) => name));
+
+  let n = stored.documents.length + 1;
+
+  while (names.has(`${FIRST_DOCUMENT.name} ${n}`)) n += 1;
+
+  const document = {
+    id: crypto.randomUUID(),
+    name: `${FIRST_DOCUMENT.name} ${n}`,
+    custom: '{}'
+  };
+
+  stored.documents.push(document);
+  stored.current = document.id;
+
+  return writeStored(storage, stored) ? document : null;
+};
+
+/**
+ * Makes a document current.
+ *
+ * @param {TokenStorage | null} storage Where it is saved
+ * @param {string} id The document
+ * @returns {boolean} Whether it was saved
+ */
+export const switchDocument = (
+  storage: TokenStorage | null,
+  id: string
+): boolean => {
+  const stored = storedDocuments(storage);
+
+  if (!stored.documents.some((document) => document.id === id)) return false;
+
+  return writeStored(storage, { ...stored, current: id });
+};
+
+/**
+ * Renames a document. A blank name keeps the old one.
+ *
+ * @param {TokenStorage | null} storage Where it is saved
+ * @param {string} id The document
+ * @param {string} name The new name
+ * @returns {boolean} Whether it was saved
+ */
+export const renameDocument = (
+  storage: TokenStorage | null,
+  id: string,
+  name: string
+): boolean => {
+  const stored = storedDocuments(storage);
+  const document = stored.documents.find((saved) => saved.id === id);
+
+  if (!document || !name.trim()) return false;
+
+  document.name = name.trim();
+
+  return writeStored(storage, stored);
+};
+
+/**
+ * Deletes a document. The first one left becomes current; deleting the last
+ * leaves the first document, empty.
+ *
+ * @param {TokenStorage | null} storage Where it is saved
+ * @param {string} id The document
+ * @returns {boolean} Whether it was saved
+ */
+export const deleteDocument = (
+  storage: TokenStorage | null,
+  id: string
+): boolean => {
+  const stored = storedDocuments(storage);
+  const documents = stored.documents.filter((document) => document.id !== id);
+
+  return writeStored(storage, {
+    ...stored,
+    documents,
+    current: documents[0]?.id
+  });
 };
 
 type Usable = { status: 'ok'; doc: DTCGDocument; tokens: FlatDesignToken[] };
@@ -137,6 +348,8 @@ export interface YourTokens {
   doc: DTCGDocument;
   tokens: FlatDesignToken[];
   latest: boolean;
+  /** The document's name */
+  name: string;
 }
 
 export interface ExampleTokens {
@@ -144,6 +357,8 @@ export interface ExampleTokens {
   reason: 'chosen' | 'none' | 'problems' | 'blocked';
   /** When you chose the example: how many tokens you have */
   yours?: number;
+  /** When you chose the example: your document's name */
+  name?: string;
 }
 
 export type FlowTokens = YourTokens | ExampleTokens;
@@ -177,13 +392,23 @@ export const chooseFlowTokens = (
       reason: latest.status === 'problems' ? 'problems' : 'none'
     };
 
+  const { documents, current } = listDocuments(storage);
+  const name =
+    documents.find(({ id }) => id === current)?.name ?? FIRST_DOCUMENT.name;
+
   if (example)
-    return { kind: 'example', reason: 'chosen', yours: found.tokens.length };
+    return {
+      kind: 'example',
+      reason: 'chosen',
+      yours: found.tokens.length,
+      name
+    };
 
   return {
     kind: 'yours',
     doc: found.doc,
     tokens: found.tokens,
-    latest: found === latest
+    latest: found === latest,
+    name
   };
 };

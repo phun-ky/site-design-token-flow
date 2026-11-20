@@ -46,7 +46,7 @@ export const describeFlowSource = (
     current
   });
   const yoursOption = (n: number, current: boolean): FlowOption => ({
-    label: 'Your tokens',
+    label: ('name' in flow && flow.name) || 'Your tokens',
     detail: `${count(n)}, saved in this browser`,
     href: YOURS,
     current

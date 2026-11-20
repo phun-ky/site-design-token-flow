@@ -69,6 +69,7 @@ const presetEls = () => [
 const sourcesEl = $<HTMLFieldSetElement>('.demo-sources');
 const bundledCountEl = $<HTMLSpanElement>('#bundled-count');
 const documentsEl = $<HTMLDivElement>('#documents');
+const documentsHintEl = $<HTMLParagraphElement>('#documents-hint');
 const documentEl = $<HTMLDivElement>('#document');
 const documentNameEl = $<HTMLInputElement>('#document-name');
 const newDocumentEl = $<HTMLButtonElement>('#new-document');
@@ -86,7 +87,7 @@ const filterEl = $<HTMLInputElement>('#filter');
 const problemsEl = $<HTMLElement>('#error');
 const problemsTitleEl = $<HTMLSpanElement>('#problems-title');
 const problemsListEl = problemsEl.querySelector('ul') as HTMLUListElement;
-const flowLinkEl = $<HTMLParagraphElement>('#to-flow');
+const flowLinkEl = $<HTMLElement>('#to-flow');
 const flowHintEl = $<HTMLSpanElement>('#to-flow-hint');
 const savedEl = $<HTMLSpanElement>('#saved');
 const checkingEl = $<HTMLSpanElement>('#checking');
@@ -141,13 +142,12 @@ const setPreset = (value: Preset) => {
   documentEl.hidden = value !== 'custom';
   documentNameEl.value = documents.find(({ id }) => id === current)?.name ?? '';
 };
-/** What a document's option says about it */
-const documentDetail = (document: SavedDocument) =>
-  !store
-    ? 'Your browser blocks storage, so they are not kept'
-    : document.custom === undefined
-      ? 'None yet: type, paste or load a file'
-      : 'Saved in this browser';
+/** What a document's option says about it, on its line: only what stands out */
+const documentDetail = (document: SavedDocument) => {
+  if (document.custom === undefined) return 'Empty';
+
+  return document.link ? 'Published' : '';
+};
 /** An option for each of your documents, and the current one's name */
 const renderDocuments = () => {
   const { documents } = listDocuments(store);
@@ -157,7 +157,7 @@ const renderDocuments = () => {
     ...documents.map((saved) => {
       const label = document.createElement('label');
       const input = document.createElement('input');
-      const text = document.createElement('span');
+      const name = document.createElement('span');
       const detail = document.createElement('span');
 
       label.className = 'demo-source-option';
@@ -165,15 +165,17 @@ const renderDocuments = () => {
       input.name = 'preset';
       input.value = 'custom';
       input.dataset.document = saved.id;
+      name.className = 'demo-source-name';
+      name.textContent = saved.name;
       detail.className = 'demo-muted';
       detail.dataset.detail = saved.id;
       detail.textContent = documentDetail(saved);
-      text.append(saved.name, detail);
-      label.append(input, text);
+      label.append(input, name, detail);
 
       return label;
     })
   );
+  documentsHintEl.hidden = Boolean(store);
   setPreset(checked);
 };
 const PRESET_NAMES = { showcase: 'Showcase', bundled: 'Example file' };
@@ -325,7 +327,9 @@ const link = mountPublishLink(store, announce, {
   opened: () => {
     renderDocuments();
     loadPreset('custom');
-  }
+  },
+  // Published or not shows on the document's line
+  changed: () => showSaved()
 });
 /**
  * Shows that the tokens are being checked. It appears only when checking
@@ -348,7 +352,7 @@ const goToLine = (line: number) => {
   sourceEl.setSelectionRange(start, start + (lines[line - 1]?.length ?? 0));
   sourceEl.scrollTop = Math.max(0, (line - 3) * lineHeight);
 };
-/** Lists the problems in the sidebar, each moving the editor to its line */
+/** Lists the problems under the editor, each moving the editor to its line */
 const showProblems = () => {
   const { valid } = readSaved(store);
 
@@ -385,7 +389,7 @@ const showProblems = () => {
     })
   );
 };
-/** What the sidebar says about your tokens, and whether they are saved */
+/** What the documents' lines say about them, and whether they are saved */
 const showSaved = () => {
   // In place, so focus stays on an option while you move between them
   for (const saved of listDocuments(store).documents) {
@@ -1247,6 +1251,19 @@ groupsEl.addEventListener('mouseover', (event) => {
 groupsEl.addEventListener('mouseleave', () => {
   hoveredId = null;
   highlight(selectedId);
+});
+
+// The link's popover opens under its button in the editor's toolbar (#162);
+// the CSS keeps it on screen
+const linkMenuEl = $<HTMLElement>('#link-menu');
+
+linkMenuEl.addEventListener('beforetoggle', (event) => {
+  if ((event as ToggleEvent).newState !== 'open') return;
+
+  const { bottom, left } = $<HTMLElement>('#link-open').getBoundingClientRect();
+
+  linkMenuEl.style.setProperty('--x', `${left}px`);
+  linkMenuEl.style.setProperty('--y', `${bottom + 6}px`);
 });
 
 mountHeader();

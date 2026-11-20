@@ -117,7 +117,8 @@ Only the maintainer can see accounts, in Supabase's dashboard. The site shows
 your name and email address only to you, in the account menu.
 
 **When you publish a link** for Tokens Studio, the document's tokens, as
-Tokens Studio JSON, are kept in the same Supabase project, at an address with
+Tokens Studio JSON, and its name, so you can open it on another device, are
+kept in the same Supabase project, at an address with
 your account's id and a random share id. Anyone with the link can read them,
 and it is cached for up to a minute; nobody can list or find links they
 haven't been given. Only you can change or delete your links, up to 3, which

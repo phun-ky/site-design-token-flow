@@ -25,6 +25,8 @@
     "check:bestpractices": "node scripts/check-bestpractices.mjs",
     "bestpractices:url": "node scripts/bestpractices-url.mjs",
     "check:colours": "node --import tsx scripts/check-colours.mjs",
+    "check:supabase": "node scripts/check-supabase-storage.mjs",
+    "test:db": "supabase test db",
     "images:logo": "node scripts/render-logo.mjs"
   },
   "repository": {

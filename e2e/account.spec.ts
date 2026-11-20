@@ -1,45 +1,12 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 import { SESSION_KEY, SUPABASE_URL } from '../src/app/supabase';
+
+import { fulfill, session, user } from './session';
 
 // Signing in (#144) against the built site, with Supabase mocked. The site's
 // Content Security Policy still applies: the browser blocks a connection it
 // doesn't allow before the mock sees it.
-const base64url = (value: object) =>
-  Buffer.from(JSON.stringify(value)).toString('base64url');
-const expiresAt = Math.floor(Date.now() / 1000) + 3600;
-const user = {
-  id: '00000000-0000-4000-8000-000000000001',
-  aud: 'authenticated',
-  role: 'authenticated',
-  email: 'someone@example.com',
-  app_metadata: { provider: 'github' },
-  user_metadata: { name: 'Some One' },
-  created_at: '2026-11-20T00:00:00Z'
-};
-const session = {
-  access_token: [
-    base64url({ alg: 'HS256', typ: 'JWT' }),
-    base64url({ sub: user.id, role: 'authenticated', exp: expiresAt }),
-    'signature'
-  ].join('.'),
-  token_type: 'bearer',
-  expires_in: 3600,
-  expires_at: expiresAt,
-  refresh_token: 'refresh-token',
-  user
-};
-const fulfill = (route: Route, body: unknown, status = 200) =>
-  route.fulfill({
-    status: route.request().method() === 'OPTIONS' ? 204 : status,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': '*',
-      'Access-Control-Allow-Methods': '*'
-    },
-    contentType: 'application/json',
-    body: JSON.stringify(body)
-  });
 const stored = (page: Page, key: string) =>
   page.evaluate((name) => localStorage.getItem(name), key);
 const violations = (page: Page) => {

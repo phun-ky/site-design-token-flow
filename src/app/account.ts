@@ -21,6 +21,12 @@ export type AccountClient = Pick<
   'getSession' | 'signInWithOAuth' | 'signOut'
 >;
 
+/**
+ * Sent on `window` whenever the menu shows who is signed in, with the
+ * session, or null when signed out: on load, after signing in and out
+ */
+export const ACCOUNT_EVENT = 'dtf-account';
+
 let client: Promise<AccountClient> | undefined;
 
 /**
@@ -46,6 +52,17 @@ export const loadClient = (): Promise<AccountClient> =>
       throw error;
     }
   ));
+
+/**
+ * The session, with its access token refreshed when it has expired, or null
+ * when signed out. Loads auth-js, so call it only when signed in.
+ *
+ * @param {() => Promise<AccountClient>} [load] Loads the client
+ * @returns {Promise<Session | null>} The session
+ */
+export const freshSession = async (
+  load: () => Promise<AccountClient> = loadClient
+): Promise<Session | null> => (await (await load()).getSession()).data.session;
 
 /**
  * Whether the page needs auth-js now: a session is stored, or the provider
@@ -132,6 +149,10 @@ export const mountAccount = (
     render(null);
   };
   const render = (session: Session | null) => {
+    window.dispatchEvent(
+      new CustomEvent<Session | null>(ACCOUNT_EVENT, { detail: session })
+    );
+
     const toggle = button(
       session ? accountName(session) : 'Sign in',
       'app-account-button'

@@ -1,12 +1,18 @@
 import 'global-jsdom/register';
 
+// Node has its own CustomEvent, which global-jsdom leaves in place, and jsdom
+// only dispatches its own events; a browser has just the one
+globalThis.CustomEvent = window.CustomEvent;
+
 import type { Session } from '@supabase/auth-js';
 
 import assert from 'node:assert/strict';
 import { afterEach, describe, it, mock } from 'node:test';
 
 import {
+  ACCOUNT_EVENT,
   accountName,
+  freshSession,
   isSignedInOrReturning,
   mountAccount,
   providerLabel,
@@ -162,6 +168,34 @@ describe('mountAccount', () => {
       { scope: 'local' }
     ]);
     assert.deepEqual(texts(root, '.app-account-button'), ['Sign in']);
+  });
+
+  it('tells the page who is signed in, on load and after signing out', async () => {
+    const seen: (Session | null)[] = [];
+    const listen = (event: Event) =>
+      seen.push((event as CustomEvent<Session | null>).detail);
+    const session = sessionOf({ name: 'Some One' });
+
+    window.addEventListener(ACCOUNT_EVENT, listen);
+
+    const { root } = mount(fakeClient(session), '{}');
+
+    await settle();
+    (root.querySelector('.app-account-action') as HTMLElement).click();
+    await settle();
+    window.removeEventListener(ACCOUNT_EVENT, listen);
+
+    assert.deepEqual(seen, [session, null]);
+  });
+
+  it('gives the current session from the client', async () => {
+    const session = sessionOf({});
+    const client = fakeClient(session);
+
+    assert.equal(
+      await freshSession(async () => client as unknown as AccountClient),
+      session
+    );
   });
 
   it('offers to sign in when auth-js or the session fails', async () => {

@@ -220,6 +220,47 @@ h3 code {
 .demo-document .demo-field {
   align-self: stretch;
 }
+/* A document's link for Tokens Studio (#145) */
+.demo-publish {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  gap: 0.5rem;
+}
+.demo-publish h2 {
+  margin: 0;
+}
+.demo-publish .demo-hint {
+  margin: 0;
+}
+.demo-publish-url {
+  display: flex;
+  gap: 0.5rem;
+}
+.demo-publish-url[hidden] {
+  display: none;
+}
+.demo-publish-url input {
+  flex: 1;
+  min-width: 0;
+}
+.demo-publish-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.demo-publish-actions [hidden] {
+  display: none;
+}
+.demo-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.demo-check[hidden] {
+  display: none;
+}
 
 .demo-field {
   display: flex;

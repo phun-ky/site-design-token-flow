@@ -11,6 +11,7 @@ import {
   listDocuments,
   readSaved,
   renameDocument,
+  restoreDocument,
   setDocumentLink,
   switchDocument,
   writeSaved,
@@ -333,6 +334,46 @@ describe('documents', () => {
     assert.deepEqual(listDocuments(storage).documents, [
       { id: 'yours', name: 'Your tokens' }
     ]);
+  });
+
+  it('numbers a name that is taken', () => {
+    const storage = memory({ custom: VALID });
+
+    assert.equal(addDocument(storage, { name: 'Brand' })?.name, 'Brand');
+    assert.equal(addDocument(storage, { name: 'Brand' })?.name, 'Brand 2');
+    assert.equal(
+      addDocument(storage, { name: 'Your tokens' })?.name,
+      'Your tokens 2'
+    );
+  });
+
+  it('restores a deleted document where it was, as current', () => {
+    const storage = memory({ custom: VALID });
+    const added = addDocument(storage, { name: 'Brand', custom: OTHER });
+    const third = addDocument(storage);
+    const brand = listDocuments(storage).documents[1];
+
+    deleteDocument(storage, added?.id as string);
+    assert.equal(restoreDocument(storage, brand, 1), true);
+
+    const { documents, current } = listDocuments(storage);
+
+    assert.deepEqual(
+      documents.map(({ id }) => id),
+      ['yours', added?.id, third?.id]
+    );
+    assert.equal(current, added?.id);
+    assert.deepEqual(readSaved(storage), { custom: OTHER });
+  });
+
+  it('restores the last document, without a second one of the same id', () => {
+    const storage = memory({ custom: VALID });
+    const [yours] = listDocuments(storage).documents;
+
+    deleteDocument(storage, 'yours');
+    restoreDocument(storage, yours, 0);
+
+    assert.deepEqual(listDocuments(storage).documents, [yours]);
   });
 
   it('deletes, making the first one left current', () => {

@@ -123,3 +123,83 @@ test('moves between documents with the arrow keys, like the presets', async ({
     page.getByRole('radio', { name: /^Your tokens/ }).first()
   ).toBeChecked();
 });
+
+// Undo and revert (#156)
+test('undoes a delete, putting the document back where it was', async ({
+  page
+}) => {
+  await page.locator('#source').fill(JSON.stringify(BRAND));
+  await page.getByRole('button', { name: 'New document' }).click();
+  await page.locator('#source').fill(JSON.stringify(PRODUCT));
+  await page.getByRole('button', { name: 'Delete document' }).click();
+  await page
+    .getByRole('dialog', { name: /^Delete/ })
+    .getByRole('button', { name: 'Delete' })
+    .click();
+  await expect(page.locator('#undo')).toContainText('Deleted Your tokens 2.');
+
+  await page.getByRole('button', { name: 'Undo' }).click();
+
+  await expect(
+    page.getByRole('radio', { name: /^Your tokens 2/ })
+  ).toBeChecked();
+  await expect(
+    page.getByRole('radio', { name: /^Your tokens 2/ })
+  ).toBeFocused();
+  await expect(page.locator(pills)).toHaveCount(2);
+  await expect(page.locator('#undo')).toBeHidden();
+  await page.reload();
+  await expect(
+    page.getByRole('radio', { name: /^Your tokens 2/ })
+  ).toBeChecked();
+});
+
+test('offers undo for 10 seconds', async ({ page }) => {
+  await page.clock.install();
+  await page.reload();
+  await page.getByRole('button', { name: 'New document' }).click();
+  await page.getByRole('button', { name: 'Delete document' }).click();
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeVisible();
+
+  await page.clock.fastForward(10_000);
+
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeHidden();
+  await expect(page.getByRole('radio', { name: /^Your tokens 2/ })).toHaveCount(
+    0
+  );
+});
+
+test('reverts edits with problems to the last version without', async ({
+  page
+}) => {
+  const revert = page.getByRole('button', {
+    name: 'Revert to the last version without problems'
+  });
+
+  await page.locator('#source').fill(JSON.stringify(BRAND));
+  await expect(page.locator(pills)).toHaveCount(1);
+  await expect(revert).toBeHidden();
+  await page.locator('#source').fill('{ "color": ');
+  await expect(revert).toBeVisible();
+
+  await revert.click();
+
+  await expect(page.locator('#source')).toHaveValue(/"blue"/);
+  await expect(page.locator('#error')).toBeHidden();
+  await expect(page.locator(pills)).toHaveCount(1);
+});
+
+test('starts a new document when editing a preset, leaving yours', async ({
+  page
+}) => {
+  await page.locator('#source').fill(JSON.stringify(BRAND));
+  await page.getByRole('radio', { name: /^Showcase/ }).check();
+  await page.locator('#source').press('End');
+  await page.locator('#source').pressSequentially(' ');
+
+  await expect(
+    page.getByRole('radio', { name: /^Showcase copy/ })
+  ).toBeChecked();
+  await page.getByRole('radio', { name: /^Your tokens/ }).check();
+  await expect(page.locator('#source')).toHaveValue(JSON.stringify(BRAND));
+});

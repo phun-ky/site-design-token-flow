@@ -77,6 +77,8 @@ export const mountPublishLink = (
   let timer: number | undefined;
   /** The document whose link changed elsewhere, until you choose a version */
   let conflict: string | null = null;
+  /** A link left out of those to open: a deleted document's, while it can come back */
+  let held: string | null = null;
   /** Links published on any device, with their names */
   let remote: { path: string; name: string; updated: string }[] = [];
 
@@ -112,7 +114,7 @@ export const mountPublishLink = (
       listDocuments(store).documents.map(({ link }) => link)
     );
     const elsewhere = signedIn
-      ? remote.filter(({ path }) => !local.has(path))
+      ? remote.filter(({ path }) => !local.has(path) && path !== held)
       : [];
 
     elsewhereEl.hidden = elsewhere.length === 0;
@@ -421,6 +423,11 @@ export const mountPublishLink = (
 
       window.clearTimeout(timer);
       timer = window.setTimeout(() => void update(id), DELAY);
+    },
+    /** Leaves a link out of those to open, or none */
+    hold: (path: string | null) => {
+      held = path;
+      renderElsewhere();
     },
     /** Whether a document's link can be unpublished from here */
     canUnpublish: (saved: SavedDocument) => signedIn && Boolean(saved.link),

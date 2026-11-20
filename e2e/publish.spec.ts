@@ -165,10 +165,11 @@ test('unpublishes the link', async ({ page }) => {
   ).toBeVisible();
 });
 
-test('unpublishes the link of a document when deleting it', async ({
+test('unpublishes the link of a deleted document once undo has passed', async ({
   page
 }) => {
   await signIn(page);
+  await page.clock.install();
 
   const { uploads, deletes } = await mockStorage(page);
 
@@ -184,8 +185,13 @@ test('unpublishes the link of a document when deleting it', async ({
   ).toBeChecked();
   await dialog.getByRole('button', { name: 'Delete' }).click();
 
+  // The link keeps working while the delete can be undone (#156)
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeVisible();
+  expect(deletes).toEqual([]);
+  await page.clock.fastForward(10_000);
+
   await expect.poll(() => deletes).toEqual([uploads[0].path]);
-  await expect(page.locator('#link-url')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeHidden();
 });
 
 test('has no axe violations with a link published', async ({ page }) => {

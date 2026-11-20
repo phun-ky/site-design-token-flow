@@ -247,14 +247,19 @@ export const addDocument = (
 ): SavedDocument | null => {
   const stored = storedDocuments(storage);
   const names = new Set(stored.documents.map(({ name }) => name));
+  const base = given.name?.trim();
 
-  let n = stored.documents.length + 1;
+  // Its own name while free, or numbered: "Your tokens 3", "Brand 2"
+  let n = base ? 1 : stored.documents.length + 1;
 
-  while (names.has(`${FIRST_DOCUMENT.name} ${n}`)) n += 1;
+  const numbered = () =>
+    base && n === 1 ? base : `${base || FIRST_DOCUMENT.name} ${n}`;
+
+  while (names.has(numbered())) n += 1;
 
   const document: SavedDocument = {
     id: crypto.randomUUID(),
-    name: given.name?.trim() || `${FIRST_DOCUMENT.name} ${n}`,
+    name: numbered(),
     custom: given.custom ?? '{}',
     ...(given.link && { link: given.link })
   };
@@ -325,6 +330,32 @@ export const deleteDocument = (
     ...stored,
     documents,
     current: documents[0]?.id
+  });
+};
+
+/**
+ * Puts a deleted document back where it was, as current: undoing a delete
+ * (#156).
+ *
+ * @param {TokenStorage | null} storage Where it is saved
+ * @param {SavedDocument} document The document as it was
+ * @param {number} index Where it was in the list
+ * @returns {boolean} Whether it was saved
+ */
+export const restoreDocument = (
+  storage: TokenStorage | null,
+  document: SavedDocument,
+  index: number
+): boolean => {
+  const { documents, ...stored } = readStored(storage);
+  const others = documents.filter(({ id }) => id !== document.id);
+
+  others.splice(Math.min(index, others.length), 0, document);
+
+  return writeStored(storage, {
+    ...stored,
+    documents: others,
+    current: document.id
   });
 };
 

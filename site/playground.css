@@ -252,6 +252,56 @@ h3 code {
 .demo-publish-actions [hidden] {
   display: none;
 }
+/* Links published on another device (#146), and a link changed elsewhere */
+.demo-elsewhere {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.demo-elsewhere[hidden] {
+  display: none;
+}
+.demo-elsewhere h2 {
+  margin: 0;
+}
+.demo-elsewhere ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.demo-elsewhere li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px dashed var(--app-border);
+  border-radius: 8px;
+}
+.demo-elsewhere li .demo-muted {
+  display: block;
+  font-size: 0.75rem;
+}
+#elsewhere-status:empty {
+  display: none;
+}
+.demo-conflict {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.625rem;
+  border: 1px solid var(--demo-accent);
+  border-radius: 8px;
+}
+.demo-conflict[hidden] {
+  display: none;
+}
+.demo-conflict .demo-hint {
+  margin: 0;
+}
 .demo-check {
   display: flex;
   align-items: center;

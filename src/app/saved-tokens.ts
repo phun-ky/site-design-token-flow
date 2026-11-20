@@ -231,13 +231,19 @@ const storedDocuments = (storage: TokenStorage | null): Stored => {
 };
 
 /**
- * Adds an empty document and makes it current.
+ * Adds a document and makes it current: empty, or with what is given, such
+ * as a link opened from another device (#146).
  *
  * @param {TokenStorage | null} storage Where to save it
+ * @param {object} [given] The name, JSON and link, when not a new empty one
+ * @param {string} [given.name] The name; a free "Your tokens n" without one
+ * @param {string} [given.custom] The JSON
+ * @param {string} [given.link] Where it is published
  * @returns {SavedDocument | null} The document, or null when it can't be saved
  */
 export const addDocument = (
-  storage: TokenStorage | null
+  storage: TokenStorage | null,
+  given: Pick<SavedDocument, 'custom' | 'link'> & { name?: string } = {}
 ): SavedDocument | null => {
   const stored = storedDocuments(storage);
   const names = new Set(stored.documents.map(({ name }) => name));
@@ -246,10 +252,11 @@ export const addDocument = (
 
   while (names.has(`${FIRST_DOCUMENT.name} ${n}`)) n += 1;
 
-  const document = {
+  const document: SavedDocument = {
     id: crypto.randomUUID(),
-    name: `${FIRST_DOCUMENT.name} ${n}`,
-    custom: '{}'
+    name: given.name?.trim() || `${FIRST_DOCUMENT.name} ${n}`,
+    custom: given.custom ?? '{}',
+    ...(given.link && { link: given.link })
   };
 
   stored.documents.push(document);

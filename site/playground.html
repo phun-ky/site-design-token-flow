@@ -122,6 +122,19 @@
             </button>
           </fieldset>
 
+          <section
+            class="demo-elsewhere"
+            id="published-elsewhere"
+            aria-labelledby="elsewhere-title"
+            hidden
+          >
+            <h2 class="demo-label" id="elsewhere-title">
+              Published, not in this browser
+            </h2>
+            <ul></ul>
+          </section>
+          <p class="demo-hint" id="elsewhere-status" role="status"></p>
+
           <div class="demo-document" id="document" hidden>
             <label class="demo-field" for="document-name">
               <span class="demo-label">Document name</span>
@@ -135,6 +148,30 @@
             <section class="demo-publish" aria-labelledby="link-title">
               <h2 class="demo-label" id="link-title">Link for Tokens Studio</h2>
               <p class="demo-hint" id="link-hint"></p>
+              <div
+                class="demo-conflict"
+                id="link-conflict"
+                role="group"
+                aria-labelledby="link-conflict-text"
+                hidden
+              >
+                <p class="demo-hint" id="link-conflict-text">
+                  The published version differs from this one, perhaps edited on
+                  another device. Your edits don't update it until you choose.
+                </p>
+                <div class="demo-publish-actions">
+                  <button
+                    type="button"
+                    class="demo-button"
+                    id="link-use-published"
+                  >
+                    Use the published version
+                  </button>
+                  <button type="button" class="demo-button" id="link-keep">
+                    Keep this version
+                  </button>
+                </div>
+              </div>
               <div class="demo-publish-url" id="link-published" hidden>
                 <input
                   id="link-url"

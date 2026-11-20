@@ -1,19 +1,25 @@
 // A document's link for Tokens Studio (#145), under its name in the
 // playground's sidebar: publish, copy, change and unpublish, and keep it up to
-// date about 2 seconds after the last edit without problems.
+// date about 2 seconds after the last edit without problems. Links published
+// on another device can be opened here (#146), and a link changed elsewhere
+// isn't overwritten without asking.
 import type { Session } from '@supabase/auth-js';
 
 import { ACCOUNT_EVENT, freshSession } from '../src/app/account';
 import { checkTokenText } from '../src/app/check-tokens';
 import {
   LINK_LIMIT,
-  countLinks,
+  downloadLink,
+  linkName,
+  listLinks,
   newLinkPath,
   publicUrl,
   removeLink,
+  sameJson,
   uploadLink
 } from '../src/app/published-links';
 import {
+  addDocument,
   listDocuments,
   setDocumentLink,
   type SavedDocument,
@@ -33,13 +39,23 @@ const time = () =>
  *
  * @param {TokenStorage | null} store Where the documents are saved
  * @param {(message: string) => void} announce Says what happened, for screen readers too
+ * @param {object} playground What the playground does for it
+ * @param {(text: string) => Promise<unknown>} playground.replace Puts JSON in the editor as the current document
+ * @param {() => void} playground.opened Shows a document just added, as current
  * @returns The playground's handles: `show` after switching documents,
  * `edited` after a version without problems is saved, and `unpublish` for a
  * document being deleted
  */
 export const mountPublishLink = (
   store: TokenStorage | null,
-  announce: (message: string) => void
+  announce: (message: string) => void,
+  {
+    replace,
+    opened
+  }: {
+    replace: (text: string) => Promise<unknown>;
+    opened: () => void;
+  }
 ) => {
   const hintEl = $<HTMLParagraphElement>('#link-hint');
   const publishedEl = $<HTMLDivElement>('#link-published');
@@ -49,10 +65,20 @@ export const mountPublishLink = (
   const changeEl = $<HTMLButtonElement>('#link-change');
   const unpublishEl = $<HTMLButtonElement>('#link-unpublish');
   const statusEl = $<HTMLParagraphElement>('#link-status');
+  const conflictEl = $<HTMLDivElement>('#link-conflict');
+  const usePublishedEl = $<HTMLButtonElement>('#link-use-published');
+  const keepEl = $<HTMLButtonElement>('#link-keep');
+  const elsewhereEl = $<HTMLElement>('#published-elsewhere');
+  const elsewhereListEl = elsewhereEl.querySelector('ul') as HTMLUListElement;
+  const elsewhereStatusEl = $<HTMLParagraphElement>('#elsewhere-status');
 
   let signedIn = false;
   let busy = false;
   let timer: number | undefined;
+  /** The document whose link changed elsewhere, until you choose a version */
+  let conflict: string | null = null;
+  /** Links published on any device, with their names */
+  let remote: { path: string; name: string; updated: string }[] = [];
 
   const find = (id: string) =>
     listDocuments(store).documents.find((saved) => saved.id === id);
@@ -71,6 +97,48 @@ export const mountPublishLink = (
       earlier: false
     });
   };
+  /** A published file as a DTCG document, through the Tokens Studio import */
+  const asDocument = async (text: string) => {
+    const { convertTokenText } = await import('../src/app/convert-tokens');
+    const converted = convertTokenText(text);
+
+    if (!converted) throw new Error('the published file is not JSON');
+
+    return JSON.stringify(converted.conversion.document, null, 2);
+  };
+  /** Published links no document in this browser has, to open */
+  const renderElsewhere = () => {
+    const local = new Set(
+      listDocuments(store).documents.map(({ link }) => link)
+    );
+    const elsewhere = signedIn
+      ? remote.filter(({ path }) => !local.has(path))
+      : [];
+
+    elsewhereEl.hidden = elsewhere.length === 0;
+    elsewhereListEl.replaceChildren(
+      ...elsewhere.map(({ path, name, updated }) => {
+        const item = document.createElement('li');
+        const label = document.createElement('span');
+        const detail = document.createElement('span');
+        const open = document.createElement('button');
+
+        detail.className = 'demo-muted';
+        detail.textContent = updated
+          ? `Updated ${new Date(updated).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`
+          : '';
+        label.append(name, detail);
+        open.type = 'button';
+        open.className = 'demo-button';
+        open.textContent = 'Open';
+        open.setAttribute('aria-label', `Open ${name}`);
+        open.addEventListener('click', () => void openLink(path, name));
+        item.append(label, open);
+
+        return item;
+      })
+    );
+  };
   const refresh = () => {
     const { link, valid } = currentDocument();
 
@@ -82,6 +150,9 @@ export const mountPublishLink = (
     publishEl.disabled = busy || !valid;
     changeEl.disabled = busy || !valid;
     unpublishEl.disabled = busy;
+    conflictEl.hidden = conflict === null || conflict !== currentDocument().id;
+    usePublishedEl.disabled = busy;
+    keepEl.disabled = busy;
     hintEl.textContent = !signedIn
       ? link
         ? 'Sign in to keep it up to date.'
@@ -97,7 +168,9 @@ export const mountPublishLink = (
    * stay saved in this browser either way.
    */
   const withSession = async (
-    step: (session: Session) => Promise<string | null>
+    step: (session: Session) => Promise<string | null>,
+    failure = 'Not published',
+    target = statusEl
   ) => {
     busy = true;
     refresh();
@@ -106,9 +179,9 @@ export const mountPublishLink = (
       const session = await freshSession();
       const failed = session ? await step(session) : 'sign in again';
 
-      if (failed) statusEl.textContent = `Not published: ${failed}`;
+      if (failed) target.textContent = `${failure}: ${failed}`;
     } catch (error) {
-      statusEl.textContent = `Not published: ${(error as Error).message}`;
+      target.textContent = `${failure}: ${(error as Error).message}`;
     } finally {
       busy = false;
       refresh();
@@ -128,7 +201,8 @@ export const mountPublishLink = (
       const failed = await uploadLink(
         access_token,
         saved.link,
-        await tokensStudio(saved.valid)
+        await tokensStudio(saved.valid),
+        saved.name
       );
 
       if (!failed && id === currentDocument().id)
@@ -139,25 +213,27 @@ export const mountPublishLink = (
 
   publishEl.addEventListener('click', () =>
     withSession(async ({ access_token, user }) => {
-      const { id, valid } = currentDocument();
+      const { id, name, valid } = currentDocument();
 
       if (!valid) return 'add tokens without problems first';
 
       // The Storage policy refuses more, this only says why
-      if ((await countLinks(access_token, user.id)) >= LINK_LIMIT)
+      if ((await listLinks(access_token, user.id)).length >= LINK_LIMIT)
         return `${LINK_LIMIT} links is the limit for now`;
 
       const path = newLinkPath(user.id);
       const failed = await uploadLink(
         access_token,
         path,
-        await tokensStudio(valid)
+        await tokensStudio(valid),
+        name
       );
 
       if (failed) return failed;
 
       setDocumentLink(store, id, path);
       published('Published the link for Tokens Studio');
+      void loadElsewhere();
 
       return null;
     })
@@ -166,7 +242,7 @@ export const mountPublishLink = (
   // changing a link works at the limit too
   changeEl.addEventListener('click', () =>
     withSession(async ({ access_token, user }) => {
-      const { id, link, valid } = currentDocument();
+      const { id, link, name, valid } = currentDocument();
 
       if (!link || !valid) return null;
 
@@ -180,13 +256,15 @@ export const mountPublishLink = (
       const failed = await uploadLink(
         access_token,
         path,
-        await tokensStudio(valid)
+        await tokensStudio(valid),
+        name
       );
 
       if (failed) return `the old link is unpublished: ${failed}`;
 
       setDocumentLink(store, id, path);
       published('Changed the link for Tokens Studio');
+      void loadElsewhere();
 
       return null;
     })
@@ -204,10 +282,109 @@ export const mountPublishLink = (
       setDocumentLink(store, id, undefined);
       statusEl.textContent = 'Unpublished: the link no longer works';
       announce('Unpublished the link');
+      void loadElsewhere();
 
       return null;
     })
   );
+
+  /** Lists the account's links, and the names of those not in this browser */
+  const loadElsewhere = async () => {
+    if (!signedIn) {
+      remote = [];
+      renderElsewhere();
+
+      return;
+    }
+
+    try {
+      const session = await freshSession();
+
+      if (!session) return;
+
+      const links = await listLinks(session.access_token, session.user.id);
+      const local = new Set(
+        listDocuments(store).documents.map(({ link }) => link)
+      );
+
+      remote = await Promise.all(
+        links.map(async (published) => ({
+          ...published,
+          name: local.has(published.path)
+            ? ''
+            : ((await linkName(session.access_token, published.path)) ??
+              'Untitled')
+        }))
+      );
+    } catch (error) {
+      remote = [];
+      elsewhereStatusEl.textContent = `Your links could not be listed: ${(error as Error).message}`;
+    }
+
+    renderElsewhere();
+  };
+
+  /** Opens a link published elsewhere as a new document, still linked */
+  async function openLink(path: string, name: string) {
+    await withSession(
+      async ({ access_token }) => {
+        const custom = await asDocument(await downloadLink(access_token, path));
+
+        if (!addDocument(store, { name, custom, link: path }))
+          return 'your browser blocks storage';
+
+        opened();
+        announce(`Opened ${name}`);
+
+        return null;
+      },
+      'Not opened',
+      elsewhereStatusEl
+    );
+    void loadElsewhere();
+  }
+
+  /** Whether the current document's link changed elsewhere since */
+  const check = () => {
+    const { id, link, valid } = currentDocument();
+
+    if (!signedIn || !link || !valid) return;
+
+    void withSession(async ({ access_token }) => {
+      const [published, ours] = await Promise.all([
+        downloadLink(access_token, link),
+        tokensStudio(valid)
+      ]);
+
+      if (!sameJson(published, ours) && id === currentDocument().id) {
+        conflict = id;
+        window.clearTimeout(timer);
+        announce('The published version differs from this one');
+      }
+
+      return null;
+    }, 'Not checked');
+  };
+
+  usePublishedEl.addEventListener('click', () =>
+    withSession(async ({ access_token }) => {
+      const { link } = currentDocument();
+
+      if (!link) return null;
+
+      conflict = null;
+      await replace(await asDocument(await downloadLink(access_token, link)));
+      statusEl.textContent = 'Using the published version';
+
+      return null;
+    }, 'Not loaded')
+  );
+  keepEl.addEventListener('click', () => {
+    const { id } = currentDocument();
+
+    conflict = null;
+    void update(id);
+  });
   copyEl.addEventListener('click', () => {
     navigator.clipboard
       ?.writeText(urlEl.value)
@@ -220,6 +397,8 @@ export const mountPublishLink = (
     if (!signedIn) window.clearTimeout(timer);
 
     refresh();
+    void loadElsewhere();
+    check();
   });
   refresh();
 
@@ -228,6 +407,8 @@ export const mountPublishLink = (
     show: () => {
       statusEl.textContent = '';
       refresh();
+      renderElsewhere();
+      check();
     },
     /** After a version without problems is saved: update the link soon */
     edited: () => {
@@ -235,7 +416,8 @@ export const mountPublishLink = (
 
       const { id, link } = currentDocument();
 
-      if (!signedIn || !link) return;
+      // A link changed elsewhere waits until you choose a version
+      if (!signedIn || !link || conflict === id) return;
 
       window.clearTimeout(timer);
       timer = window.setTimeout(() => void update(id), DELAY);
@@ -243,9 +425,11 @@ export const mountPublishLink = (
     /** Whether a document's link can be unpublished from here */
     canUnpublish: (saved: SavedDocument) => signedIn && Boolean(saved.link),
     /** Unpublishes a document's link, before the document is deleted */
-    unpublish: (saved: SavedDocument) =>
-      withSession(async ({ access_token }) =>
+    unpublish: async (saved: SavedDocument) => {
+      await withSession(async ({ access_token }) =>
         saved.link ? removeLink(access_token, saved.link) : null
-      )
+      );
+      void loadElsewhere();
+    }
   };
 };

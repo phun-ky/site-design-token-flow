@@ -651,11 +651,6 @@ select:hover {
   overflow: auto;
   border-right: 1px solid var(--demo-border);
 }
-.demo-output {
-  background-image: radial-gradient(var(--app-dot) 1px, transparent 0);
-  background-size: 20px 20px;
-}
-
 .demo-panel-head {
   display: flex;
   flex-wrap: wrap;

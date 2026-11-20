@@ -8,6 +8,28 @@ are tracked as
 
 ## Planned
 
+### Published links for Tokens Studio
+
+The Tokens Studio plugin for Figma can sync tokens from a URL, read only, and
+shows when they have changed. You'll be able to sign in with GitHub or Google
+and publish the tokens you edit in the playground as such a URL, in Tokens
+Studio's format, so designers pull your latest tokens into Figma.
+
+- **Opt in.** The site works as it does now without signing in, and nothing
+  leaves your browser until you publish a link. Visitors who don't sign in load
+  nothing from other hosts.
+- **What is stored:** the tokens you publish, readable by anyone with the link,
+  and your account's id and email from GitHub or Google. It is kept with
+  [Supabase](https://supabase.com), in the EU (Ireland). You can unpublish a
+  link, or delete your account and everything published with it.
+- **Up to 3 links**, one per token document in the playground. Once a link is
+  published, your edits update it as you make them.
+
+The steps are tracked in
+[#148](https://github.com/phun-ky/site-design-token-flow/issues/148). The
+security policy and the privacy details change with the pull requests that
+ship each step.
+
 ### The pill renderer as its own package
 
 `src/tokens/`, which reads DTCG 2025.10 token files, validates them and renders
@@ -37,12 +59,16 @@ issue first.
 - **Your own token file in the flow view:** open or drop a `*.tokens.json` file
   to see its flow, as the playground does for single tokens. It would stay in
   the browser, like the playground's.
+- **More than 3 published links**, on a paid plan
+  ([#150](https://github.com/phun-ky/site-design-token-flow/issues/150)).
+- **Editing tokens in Figma and syncing them back** to the site, with Tokens
+  Studio's Generic Versioned Storage.
 
 ## Not planned
 
-- **Accounts, a server or storing tokens anywhere.** The site is static, and
-  what you paste into the playground stays in your browser.
-- **Collecting data.** The site doesn't track visitors or send anything
-  anywhere, and loads nothing from other hosts.
+- **Storing tokens you haven't published.** What you paste into the playground
+  stays in your browser until you publish a link.
+- **Collecting data.** The site doesn't track visitors, and stores nothing
+  about you beyond the account you sign in with.
 - **Runtime dependencies without discussion.** A new library in the site is
   discussed in an issue first; see the [security policy](SECURITY.md#dependencies).

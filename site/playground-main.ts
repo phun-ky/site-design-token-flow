@@ -48,6 +48,7 @@ import {
 
 import { runImportWizard } from './import-wizard';
 import { mountNewTokenForm } from './new-token-form';
+import { mountPublishLink } from './publish-link';
 import showcaseTokens from './showcase.tokens.json';
 import type { CheckRequest, CheckResponse } from './validate-worker';
 
@@ -73,6 +74,8 @@ const newDocumentEl = $<HTMLButtonElement>('#new-document');
 const deleteDocumentEl = $<HTMLButtonElement>('#delete-document');
 const deleteEl = $<HTMLDialogElement>('#delete');
 const deleteNameEl = $<HTMLSpanElement>('#delete-name');
+const deleteUnpublishFieldEl = $<HTMLLabelElement>('#delete-unpublish-field');
+const deleteUnpublishEl = $<HTMLInputElement>('#delete-unpublish');
 const prefixEl = $<HTMLInputElement>('#prefix');
 const filterEl = $<HTMLInputElement>('#filter');
 const problemsEl = $<HTMLElement>('#error');
@@ -275,6 +278,8 @@ const announce = (message: string) => {
   announceEl.textContent = '';
   requestAnimationFrame(() => (announceEl.textContent = message));
 };
+// The current document's link for Tokens Studio (#145)
+const link = mountPublishLink(store, announce);
 /**
  * Shows that the tokens are being checked. It appears only when checking
  * takes more than 300 ms (a CSS animation delay), so typing doesn't flicker.
@@ -365,8 +370,11 @@ const apply = (checked: CheckedTokens, text: string) => {
     problems.length === 0 &&
     tokens.length > 0 &&
     readSaved(store).custom === text
-  )
+  ) {
     writeSaved(store, { valid: text });
+    // and the version a published link serves, once you stop typing
+    link.edited();
+  }
 
   showProblems();
   render();
@@ -569,6 +577,7 @@ const loadPreset = (value: Preset) => {
       : JSON.stringify(PRESETS[value], null, 2);
   setPreset(value);
   writeSaved(store, { preset: value });
+  link.show();
   void parse();
   updateSource();
 };
@@ -613,9 +622,13 @@ documentNameEl.addEventListener('change', () => {
 });
 
 /** Deletes the current document, and shows the one that is current then */
-const removeDocument = () => {
+const removeDocument = async (unpublish: boolean) => {
   const { documents, current } = listDocuments(store);
-  const name = documents.find(({ id }) => id === current)?.name ?? '';
+  const saved = documents.find(({ id }) => id === current);
+  const name = saved?.name ?? '';
+
+  if (unpublish && saved && link.canUnpublish(saved))
+    await link.unpublish(saved);
 
   deleteDocument(store, current);
   renderDocuments();
@@ -630,19 +643,25 @@ deleteDocumentEl.addEventListener('click', () => {
   const { documents, current } = listDocuments(store);
   const saved = documents.find(({ id }) => id === current);
 
-  // Only ask when there are tokens to lose
-  if ((saved?.custom ?? '{}').trim() === '{}') {
-    removeDocument();
+  // Only ask when there are tokens or a link to lose
+  if ((saved?.custom ?? '{}').trim() === '{}' && !saved?.link) {
+    void removeDocument(false);
 
     return;
   }
 
+  // Unpublishing needs signing in; signed out, the link stays published
+  deleteUnpublishFieldEl.hidden = !saved || !link.canUnpublish(saved);
+  deleteUnpublishEl.checked = true;
   deleteNameEl.textContent = `"${saved?.name}"`;
   deleteEl.returnValue = '';
   deleteEl.showModal();
 });
 deleteEl.addEventListener('close', () => {
-  if (deleteEl.returnValue === 'delete') removeDocument();
+  if (deleteEl.returnValue === 'delete')
+    void removeDocument(
+      !deleteUnpublishFieldEl.hidden && deleteUnpublishEl.checked
+    );
 });
 // The backdrop cancels, like Esc and Cancel
 deleteEl.addEventListener('click', (event) => {

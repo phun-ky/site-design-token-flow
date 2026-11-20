@@ -55,6 +55,8 @@ export interface SavedDocument {
   custom?: string;
   /** The last version of `custom` without problems and with tokens */
   valid?: string;
+  /** Where it is published for Tokens Studio (#145): `<user id>/<share id>.json` */
+  link?: string;
 }
 
 /**
@@ -74,13 +76,17 @@ interface Stored {
 }
 
 const isDocument = (value: unknown): value is SavedDocument => {
-  const { id, name, custom, valid } = (value ?? {}) as Record<string, unknown>;
+  const { id, name, custom, valid, link } = (value ?? {}) as Record<
+    string,
+    unknown
+  >;
 
   return (
     isString(id) &&
     isString(name) &&
-    (custom === undefined || isString(custom)) &&
-    (valid === undefined || isString(valid))
+    [custom, valid, link].every(
+      (field) => field === undefined || isString(field)
+    )
   );
 };
 /**
@@ -106,12 +112,15 @@ const readStored = (storage: TokenStorage | null): Stored => {
   let list: SavedDocument[] = [];
 
   if (Array.isArray(documents)) {
-    list = documents.filter(isDocument).map(({ id, name, custom, valid }) => ({
-      id,
-      name,
-      ...(custom !== undefined && { custom }),
-      ...(valid !== undefined && { valid })
-    }));
+    list = documents
+      .filter(isDocument)
+      .map(({ id, name, custom, valid, link }) => ({
+        id,
+        name,
+        ...(custom !== undefined && { custom }),
+        ...(valid !== undefined && { valid }),
+        ...(link !== undefined && { link })
+      }));
   } else if (isString(custom) || isString(valid)) {
     // Saved before there were documents: one document
     list = [
@@ -310,6 +319,30 @@ export const deleteDocument = (
     documents,
     current: documents[0]?.id
   });
+};
+
+/**
+ * Sets or clears where a document is published.
+ *
+ * @param {TokenStorage | null} storage Where it is saved
+ * @param {string} id The document
+ * @param {string | undefined} link `<user id>/<share id>.json`, or undefined once unpublished
+ * @returns {boolean} Whether it was saved
+ */
+export const setDocumentLink = (
+  storage: TokenStorage | null,
+  id: string,
+  link: string | undefined
+): boolean => {
+  const stored = storedDocuments(storage);
+  const document = stored.documents.find((saved) => saved.id === id);
+
+  if (!document) return false;
+
+  if (link) document.link = link;
+  else delete document.link;
+
+  return writeStored(storage, stored);
 };
 
 type Usable = { status: 'ok'; doc: DTCGDocument; tokens: FlatDesignToken[] };

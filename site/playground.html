@@ -132,6 +132,33 @@
                 spellcheck="false"
               />
             </label>
+            <section class="demo-publish" aria-labelledby="link-title">
+              <h2 class="demo-label" id="link-title">Link for Tokens Studio</h2>
+              <p class="demo-hint" id="link-hint"></p>
+              <div class="demo-publish-url" id="link-published" hidden>
+                <input
+                  id="link-url"
+                  type="text"
+                  readonly
+                  aria-labelledby="link-title"
+                />
+                <button type="button" class="demo-button" id="link-copy">
+                  Copy link
+                </button>
+              </div>
+              <div class="demo-publish-actions">
+                <button type="button" class="demo-button" id="link-publish">
+                  Publish link
+                </button>
+                <button type="button" class="demo-button" id="link-change">
+                  Change link
+                </button>
+                <button type="button" class="demo-button" id="link-unpublish">
+                  Unpublish
+                </button>
+              </div>
+              <p class="demo-hint" id="link-status" role="status"></p>
+            </section>
             <button type="button" class="demo-button" id="delete-document">
               Delete document
             </button>
@@ -427,6 +454,10 @@
       <form method="dialog">
         <h2 id="delete-title">Delete <span id="delete-name"></span>?</h2>
         <p class="demo-hint">Its tokens are removed from this browser.</p>
+        <label class="demo-check" id="delete-unpublish-field" hidden>
+          <input type="checkbox" id="delete-unpublish" checked />
+          Unpublish its link for Tokens Studio too
+        </label>
         <div class="demo-dialog-actions">
           <button type="submit" value="cancel" class="demo-button" autofocus>
             Cancel

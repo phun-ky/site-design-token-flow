@@ -23,7 +23,10 @@ const edit = async (page: Page, tokens: unknown) => {
   await page.locator('#source').fill(JSON.stringify(tokens, null, 2));
   await expect(page.locator('#link-hint')).not.toHaveText(/without problems/);
 };
+/** The link's popover, from the editor's toolbar (#162) */
+const openLink = (page: Page) => page.locator('#link-open').click();
 const publish = async (page: Page) => {
+  await openLink(page);
   await page.getByRole('button', { name: 'Publish link' }).click();
   await expect(page.locator('#link-status')).toContainText('Published');
 };
@@ -67,6 +70,11 @@ test('publishes Tokens Studio JSON, and copies the link', async ({
   await expect(page.locator('#link-url')).toHaveValue(url);
   await page.getByRole('button', { name: 'Copy link' }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(url);
+  // The toolbar's button and the document's line say it is published
+  await expect(page.locator('#link-open')).toHaveText('Published');
+  await expect(
+    page.getByRole('radio', { name: 'Your tokens Published' })
+  ).toBeChecked();
   // Kept over a reload
   await page.reload();
   await expect(page.locator('#link-url')).toHaveValue(url);
@@ -103,6 +111,7 @@ test('says when the limit is reached, and publishes nothing', async ({
 
   await page.goto('playground');
   await edit(page, TOKENS);
+  await openLink(page);
   await page.getByRole('button', { name: 'Publish link' }).click();
 
   await expect(page.locator('#link-status')).toHaveText(
@@ -118,6 +127,7 @@ test('says why an upload was refused, and keeps your tokens', async ({
   await mockStorage(page, { refuse: true });
   await page.goto('playground');
   await edit(page, TOKENS);
+  await openLink(page);
   await page.getByRole('button', { name: 'Publish link' }).click();
 
   await expect(page.locator('#link-status')).toHaveText(
@@ -203,6 +213,7 @@ test('has no axe violations with a link published', async ({ page }) => {
 
   const { violations } = await new AxeBuilder({ page })
     .include('#document')
+    .include('#link-menu')
     .withTags([
       'wcag2a',
       'wcag2aa',

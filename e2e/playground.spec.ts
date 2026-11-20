@@ -238,7 +238,7 @@ test('moves the editor to the line of a problem', async ({ page }) => {
   expect(selected).toBe('    "cta": {');
 });
 
-test('collapses the sidebar to a rail, and still tells about problems', async ({
+test('collapses the sidebar to a rail, with the problems still in view', async ({
   page
 }) => {
   const sidebar = page.locator('#playground-sidebar');
@@ -257,20 +257,14 @@ test('collapses the sidebar to a rail, and still tells about problems', async ({
     .poll(async () => (await editor.boundingBox())!.width)
     .toBeGreaterThan(narrow);
 
-  // Problems: announced, and described on the button, which has a dot
+  // Problems are under the editor (#162), not in the sidebar
   await page
     .locator('#source')
     .fill('{ "color": { "$type": "color", "a": { "$value": "{nope}" } } }');
   await expect(page.locator('#problems-title')).toHaveText(/1 problem/);
-  await expect(button).toHaveAccessibleDescription(/1 problem/);
-  await expect
-    .poll(() =>
-      button.evaluate((el) => getComputedStyle(el, '::after').content)
-    )
-    .toBe('""');
+  await expect(page.locator('#error li')).toBeVisible();
 
   await page.reload();
   await expect(sidebar).toHaveCSS('width', '48px');
-  await button.click();
   await expect(page.locator('#error li')).toHaveCount(1);
 });

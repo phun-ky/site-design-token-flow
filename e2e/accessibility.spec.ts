@@ -22,6 +22,16 @@ const STATES: {
 }[] = [
   ...PAGES.map(({ name, path }) => ({ name, path })),
   {
+    name: 'flow with the account menu open',
+    path: '',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'Sign in' }).click();
+      await expect(
+        page.getByRole('button', { name: 'Continue with GitHub' })
+      ).toBeVisible();
+    }
+  },
+  {
     name: 'playground with a pill selected',
     path: 'playground',
     prepare: async (page) => {

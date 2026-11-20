@@ -122,6 +122,13 @@
             </button>
           </fieldset>
 
+          <p class="demo-undo" id="undo" hidden>
+            <span id="undo-text"></span>
+            <button type="button" class="demo-button" id="undo-button">
+              Undo
+            </button>
+          </p>
+
           <section
             class="demo-elsewhere"
             id="published-elsewhere"
@@ -265,6 +272,9 @@
               <span id="problems-title" role="alert"></span>
             </h2>
             <ul></ul>
+            <button type="button" class="demo-button" id="revert" hidden>
+              Revert to the last version without problems
+            </button>
           </section>
 
           <p id="to-flow" class="demo-flow" hidden>
@@ -490,7 +500,10 @@
     <dialog id="delete" class="demo-dialog" aria-labelledby="delete-title">
       <form method="dialog">
         <h2 id="delete-title">Delete <span id="delete-name"></span>?</h2>
-        <p class="demo-hint">Its tokens are removed from this browser.</p>
+        <p class="demo-hint">
+          Its tokens are removed from this browser. You can undo it for 10
+          seconds.
+        </p>
         <label class="demo-check" id="delete-unpublish-field" hidden>
           <input type="checkbox" id="delete-unpublish" checked />
           Unpublish its link for Tokens Studio too

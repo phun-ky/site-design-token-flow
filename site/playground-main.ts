@@ -23,6 +23,7 @@ import {
   listDocuments,
   readSaved,
   renameDocument,
+  restoreDocument,
   switchDocument,
   writeSaved,
   type Preset,
@@ -73,6 +74,10 @@ const documentNameEl = $<HTMLInputElement>('#document-name');
 const newDocumentEl = $<HTMLButtonElement>('#new-document');
 const deleteDocumentEl = $<HTMLButtonElement>('#delete-document');
 const deleteEl = $<HTMLDialogElement>('#delete');
+const undoEl = $<HTMLParagraphElement>('#undo');
+const undoTextEl = $<HTMLSpanElement>('#undo-text');
+const undoButtonEl = $<HTMLButtonElement>('#undo-button');
+const revertEl = $<HTMLButtonElement>('#revert');
 const deleteNameEl = $<HTMLSpanElement>('#delete-name');
 const deleteUnpublishFieldEl = $<HTMLLabelElement>('#delete-unpublish-field');
 const deleteUnpublishEl = $<HTMLInputElement>('#delete-unpublish');
@@ -170,6 +175,41 @@ const renderDocuments = () => {
     })
   );
   setPreset(checked);
+};
+const PRESET_NAMES = { showcase: 'Showcase', bundled: 'Example file' };
+/**
+ * Saves JSON as your tokens. While a preset is chosen it starts a new
+ * document (#156), so none of yours is overwritten; an empty current
+ * document, such as on a first visit, is used as it is.
+ *
+ * @param {string} text The JSON
+ * @param {string} [name] The new document's name; "Showcase copy" without one
+ * @returns {boolean} Whether it was saved
+ */
+const saveAsYours = (text: string, name?: string) => {
+  const chosen = preset();
+  const { custom = '{}' } = readSaved(store);
+
+  if (chosen !== 'custom' && custom.trim() !== '{}') {
+    const added = addDocument(store, {
+      name: name ?? `${PRESET_NAMES[chosen]} copy`,
+      custom: text
+    });
+
+    if (added) {
+      renderDocuments();
+      setPreset('custom');
+      writeSaved(store, { preset: 'custom' });
+      link.show();
+      announce(`Started ${added.name}, a new document`);
+
+      return true;
+    }
+  }
+
+  setPreset('custom');
+
+  return writeSaved(store, { preset: 'custom', custom: text });
 };
 
 // Syntax highlighting, once Shiki has loaded; plain text until then
@@ -310,7 +350,14 @@ const goToLine = (line: number) => {
 };
 /** Lists the problems in the sidebar, each moving the editor to its line */
 const showProblems = () => {
+  const { valid } = readSaved(store);
+
   problemsEl.hidden = problems.length === 0;
+  revertEl.hidden =
+    problems.length === 0 ||
+    preset() !== 'custom' ||
+    !valid ||
+    valid === sourceEl.value;
   problemsTitleEl.textContent = `${plural(problems.length, 'problem')} in the tokens`;
   problemsListEl.replaceChildren(
     ...problems.map((problem) => {
@@ -593,8 +640,7 @@ let parseTimer: number | undefined;
 
 sourceEl.addEventListener('input', () => {
   updateSource();
-  setPreset('custom');
-  writeSaved(store, { preset: 'custom', custom: sourceEl.value });
+  saveAsYours(sourceEl.value);
   window.clearTimeout(parseTimer);
   parseTimer = window.setTimeout(() => void parse(), 250);
 });
@@ -631,22 +677,83 @@ documentNameEl.addEventListener('change', () => {
 });
 
 /** Deletes the current document, and shows the one that is current then */
-const removeDocument = async (unpublish: boolean) => {
-  const { documents, current } = listDocuments(store);
-  const saved = documents.find(({ id }) => id === current);
-  const name = saved?.name ?? '';
+/** How long a deleted document can be restored (#156) */
+const UNDO_TIME = 10_000;
 
-  if (unpublish && saved && link.canUnpublish(saved))
-    await link.unpublish(saved);
+let undo: {
+  document: SavedDocument;
+  index: number;
+  unpublish: boolean;
+  timer: number;
+} | null = null;
+
+/** Ends the undo of the last delete: its link is unpublished only now */
+const finishUndo = () => {
+  if (!undo) return;
+
+  const { document, unpublish, timer } = undo;
+
+  window.clearTimeout(timer);
+  undo = null;
+  undoEl.hidden = true;
+  link.hold(null);
+
+  if (unpublish && link.canUnpublish(document)) void link.unpublish(document);
+};
+/** Deletes the current document, and offers to undo it for a while */
+const removeDocument = (unpublish: boolean) => {
+  finishUndo();
+
+  const { documents, current } = listDocuments(store);
+  const index = documents.findIndex(({ id }) => id === current);
+  const saved = documents[index];
 
   deleteDocument(store, current);
+  undo = {
+    document: saved,
+    index,
+    unpublish,
+    timer: window.setTimeout(finishUndo, UNDO_TIME)
+  };
+  // Not listed as published elsewhere while it can come back
+  link.hold(saved.link ?? null);
   renderDocuments();
   loadPreset('custom');
-  announce(`Deleted ${name}`);
+  undoTextEl.textContent = `Deleted ${saved.name}.`;
+  undoEl.hidden = false;
+  announce(`Deleted ${saved.name}. You can undo it for 10 seconds.`);
   presetEls()
     .find((input) => input.checked)
     ?.focus();
 };
+
+undoButtonEl.addEventListener('click', () => {
+  if (!undo) return;
+
+  const { document, index, timer } = undo;
+
+  window.clearTimeout(timer);
+  undo = null;
+  undoEl.hidden = true;
+  link.hold(null);
+  restoreDocument(store, document, index);
+  renderDocuments();
+  loadPreset('custom');
+  announce(`Restored ${document.name}`);
+  presetEls()
+    .find((input) => input.checked)
+    ?.focus();
+});
+// Revert: the last version without problems, which each document keeps
+revertEl.addEventListener('click', () => {
+  const { valid } = readSaved(store);
+
+  if (!valid) return;
+
+  void useDocument(valid).then(() =>
+    announce('Reverted to the last version without problems')
+  );
+});
 
 deleteDocumentEl.addEventListener('click', () => {
   const { documents, current } = listDocuments(store);
@@ -654,7 +761,7 @@ deleteDocumentEl.addEventListener('click', () => {
 
   // Only ask when there are tokens or a link to lose
   if ((saved?.custom ?? '{}').trim() === '{}' && !saved?.link) {
-    void removeDocument(false);
+    removeDocument(false);
 
     return;
   }
@@ -668,9 +775,7 @@ deleteDocumentEl.addEventListener('click', () => {
 });
 deleteEl.addEventListener('close', () => {
   if (deleteEl.returnValue === 'delete')
-    void removeDocument(
-      !deleteUnpublishFieldEl.hidden && deleteUnpublishEl.checked
-    );
+    removeDocument(!deleteUnpublishFieldEl.hidden && deleteUnpublishEl.checked);
 });
 // The backdrop cancels, like Esc and Cancel
 deleteEl.addEventListener('click', (event) => {
@@ -789,13 +894,12 @@ const yourTokens = () => {
   }
 };
 /** Puts a document in the editor as your tokens, checked and saved */
-const useDocument = async (text: string) => {
+const useDocument = async (text: string, name?: string) => {
   window.clearTimeout(parseTimer);
   sourceEl.value = text;
   sourceEl.scrollTop = 0;
-  setPreset('custom');
 
-  const saved = writeSaved(store, { preset: 'custom', custom: text });
+  const saved = saveAsYours(text, name);
 
   updateSource();
   await parse();
@@ -910,7 +1014,11 @@ const loadFile = async (
       steps: steps(2)
     });
 
-    const saved = await useDocument(loadText);
+    // A new document, named after the file, when a preset is chosen
+    const saved = await useDocument(
+      loadText,
+      file.name.replace(/(\.tokens)?\.json$/i, '')
+    );
     const summary = `${plural(tokens.length, 'token')}${problems.length ? `, ${plural(problems.length, 'problem')}` : ''}`;
 
     showFileStatus(

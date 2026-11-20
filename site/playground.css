@@ -252,6 +252,33 @@ h3 code {
 .demo-publish-actions [hidden] {
   display: none;
 }
+/* Nothing to show yet: no gap for it */
+.demo-publish-actions:not(:has(> :not([hidden]))),
+#link-status:empty {
+  display: none;
+}
+/* Undoing a delete (#156), for a while after it */
+.demo-undo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--demo-accent);
+  border-radius: 8px;
+  font-size: 0.875rem;
+}
+.demo-undo[hidden] {
+  display: none;
+}
+.demo-problems > .demo-button {
+  margin-top: 0.5rem;
+}
+.demo-problems > .demo-button[hidden] {
+  display: none;
+}
+
 /* Links published on another device (#146), and a link changed elsewhere */
 .demo-elsewhere {
   display: flex;

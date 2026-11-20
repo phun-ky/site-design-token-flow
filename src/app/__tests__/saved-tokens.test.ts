@@ -11,6 +11,7 @@ import {
   listDocuments,
   readSaved,
   renameDocument,
+  setDocumentLink,
   switchDocument,
   writeSaved,
   type TokenStorage
@@ -296,6 +297,26 @@ describe('documents', () => {
     assert.equal(renameDocument(storage, 'yours', '   '), false);
     assert.equal(renameDocument(storage, 'nope', 'X'), false);
     assert.equal(listDocuments(storage).documents[0].name, 'Brand');
+  });
+
+  it('sets and clears the link of a document', () => {
+    const storage = memory({ custom: VALID });
+
+    assert.equal(setDocumentLink(storage, 'yours', 'u/s.json'), true);
+    assert.equal(listDocuments(storage).documents[0].link, 'u/s.json');
+    assert.equal(setDocumentLink(storage, 'yours', undefined), true);
+    assert.equal('link' in listDocuments(storage).documents[0], false);
+    assert.equal(setDocumentLink(storage, 'nope', 'u/s.json'), false);
+  });
+
+  it('leaves out a link that is not a string', () => {
+    const storage = memory({
+      documents: [{ id: 'a', name: 'A', link: 3 }]
+    });
+
+    assert.deepEqual(listDocuments(storage).documents, [
+      { id: 'yours', name: 'Your tokens' }
+    ]);
   });
 
   it('deletes, making the first one left current', () => {

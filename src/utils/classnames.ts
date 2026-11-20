@@ -1,4 +1,4 @@
-import { isNotString } from './type-of';
+import { isNotString } from '@phun-ky/typeof';
 
 /**
  * Type for the optional properties object with boolean values.

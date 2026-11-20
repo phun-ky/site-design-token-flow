@@ -1,6 +1,11 @@
 import type { AuthClient, Session } from '@supabase/auth-js';
 
-import { browserStorage, type TokenStorage } from './saved-tokens';
+import {
+  browserStorage,
+  listDocuments,
+  setDocumentLink,
+  type TokenStorage
+} from './saved-tokens';
 import { SESSION_KEY, SUPABASE_KEY, SUPABASE_URL } from './supabase';
 
 /**
@@ -65,6 +70,25 @@ export const freshSession = async (
 ): Promise<Session | null> => (await (await load()).getSession()).data.session;
 
 /**
+ * Deletes the signed in account and everything published with it, with the
+ * `delete-account` Edge Function (#147), which has the key it takes.
+ *
+ * @param {string} token The session's access token
+ * @param {typeof fetch} [request] fetch, which tests replace
+ * @returns {Promise<boolean>} Whether it was deleted
+ */
+export const deleteAccount = async (
+  token: string,
+  request: typeof fetch = fetch
+): Promise<boolean> =>
+  (
+    await request(`${SUPABASE_URL}/functions/v1/delete-account`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, authorization: `Bearer ${token}` }
+    })
+  ).ok;
+
+/**
  * Whether the page needs auth-js now: a session is stored, or the provider
  * has just sent the visitor back with a code or an error.
  *
@@ -124,6 +148,7 @@ const button = (text: string, className: string) => {
  * @param {() => Promise<AccountClient>} [options.load] Loads the client
  * @param {TokenStorage | null} [options.storage] Where the session is kept
  * @param {Pick<Location, 'origin' | 'pathname' | 'search'>} [options.place] The page's location
+ * @param {typeof fetch} [options.request] fetch, for deleting the account
  * @returns {HTMLElement} The menu's container
  */
 export const mountAccount = (
@@ -131,11 +156,13 @@ export const mountAccount = (
   {
     load = loadClient,
     storage = browserStorage(),
-    place = location
+    place = location,
+    request = fetch
   }: {
     load?: () => Promise<AccountClient>;
     storage?: TokenStorage | null;
     place?: Pick<Location, 'origin' | 'pathname' | 'search'>;
+    request?: typeof fetch;
   } = {}
 ): HTMLElement => {
   const root = document.createElement('div');
@@ -143,12 +170,33 @@ export const mountAccount = (
   root.className = 'app-account';
   parent.append(root);
 
+  // Asks before deleting the account (#147)
+  const dialog = document.createElement('dialog');
+
+  let shown: Session | null = null;
+
+  dialog.className = 'app-dialog';
+  dialog.setAttribute('aria-labelledby', 'app-delete-account-title');
+  dialog.innerHTML = `
+    <form method="dialog">
+      <h2 id="app-delete-account-title">Delete your account?</h2>
+      <p>Your published links for Tokens Studio stop working, and your account is removed. Your tokens in this browser stay.</p>
+      <div class="app-dialog-actions">
+        <button type="submit" value="cancel" class="app-account-action" autofocus>Cancel</button>
+        <button type="submit" value="delete" class="app-account-action">Delete account</button>
+      </div>
+    </form>
+  `;
+  document.body.append(dialog);
+
   const failed = (error: unknown) => {
     // eslint-disable-next-line no-console -- signing in has no other place to say why it failed
     console.error(error);
     render(null);
   };
-  const render = (session: Session | null) => {
+  /** Shows the menu, open with a message when there is one */
+  const render = (session: Session | null, message?: string) => {
+    shown = session;
     window.dispatchEvent(
       new CustomEvent<Session | null>(ACCOUNT_EVENT, { detail: session })
     );
@@ -172,13 +220,20 @@ export const mountAccount = (
 
       email.textContent = session.user.email ?? accountName(session);
       note.append('Signed in as ', email, ` with ${providerLabel(session)}`);
+
+      const remove = button('Delete account', 'app-account-action');
+
       signOut.addEventListener('click', () => {
         // Only this browser: other devices stay signed in
         load()
           .then((auth) => auth.signOut({ scope: 'local' }))
           .then(() => render(null), failed);
       });
-      menu.append(note, signOut);
+      remove.addEventListener('click', () => {
+        dialog.returnValue = '';
+        dialog.showModal();
+      });
+      menu.append(note, signOut, remove);
     } else {
       note.textContent =
         'Sign in to publish your tokens as a link for Tokens Studio.';
@@ -205,8 +260,44 @@ export const mountAccount = (
       );
     }
 
+    if (message) note.textContent = message;
+
     root.replaceChildren(toggle, menu);
+
+    if (message) menu.showPopover?.();
   };
+  const removeAccount = async () => {
+    try {
+      const auth = await load();
+      const { data } = await auth.getSession();
+
+      if (
+        !data.session ||
+        !(await deleteAccount(data.session.access_token, request))
+      )
+        throw new Error('delete-account refused');
+
+      await auth.signOut({ scope: 'local' });
+
+      // The links went with the account
+      for (const { id, link } of listDocuments(storage).documents)
+        if (link) setDocumentLink(storage, id, undefined);
+
+      render(null, 'Your account and its published links are deleted.');
+    } catch (error) {
+      // eslint-disable-next-line no-console -- the menu says it failed, the console why
+      console.error(error);
+      render(shown, 'Your account could not be deleted. Try again later.');
+    }
+  };
+
+  dialog.addEventListener('close', () => {
+    if (dialog.returnValue === 'delete') void removeAccount();
+  });
+  // The backdrop cancels, like Esc and Cancel
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) dialog.close('cancel');
+  });
 
   if (isSignedInOrReturning(storage, place.search)) {
     load()

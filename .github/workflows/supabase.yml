@@ -42,5 +42,14 @@ jobs:
         run: supabase start -x realtime,studio,imgproxy,edge-runtime,logflare,vector,supavisor,mailpit,postgres-meta
       - name: Test the policies in SQL
         run: supabase test db
-      - name: Check the Storage API over HTTP
+      - name: Serve the Edge Functions # In the background, until it answers
+        run: |
+          supabase functions serve > "$RUNNER_TEMP/functions.log" 2>&1 &
+          for _ in $(seq 60); do
+            curl -sf -X OPTIONS http://127.0.0.1:54321/functions/v1/delete-account > /dev/null && exit 0
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/functions.log"
+          exit 1
+      - name: Check the Storage API and Edge Functions over HTTP
         run: npm run check:supabase

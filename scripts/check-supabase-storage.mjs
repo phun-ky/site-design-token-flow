@@ -1,7 +1,8 @@
 // Checks published token links (#143) over HTTP against the local Supabase
 // stack: what the Storage API does with the bucket and its policies, which
 // the SQL tests in supabase/tests can't show (upserts, CORS, cache headers).
-// Run `supabase start` first, then `npm run check:supabase`.
+// Run `supabase start` and `supabase functions serve` first, then
+// `npm run check:supabase`.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 
@@ -127,3 +128,52 @@ await check('the owner unpublishes a link', async () => {
   assert.equal((await remove(a, paths[1])).status, 200);
   assert.equal((await fetch(publicUrl(paths[1]))).status, 400);
 });
+
+// Deleting an account (#147), through the delete-account Edge Function
+const deleteAccount = (token, origin = 'https://phun-ky.net') =>
+  fetch(`${api}/functions/v1/delete-account`, {
+    method: 'POST',
+    headers: {
+      apikey: key,
+      origin,
+      ...(token && { authorization: `Bearer ${token}` })
+    }
+  });
+
+await check('deleting an account needs signing in', async () => {
+  assert.equal((await deleteAccount(null)).status, 401);
+});
+// The function's CORS headers can't be checked here: the local gateway answers
+// preflight requests itself, with *
+
+const c = await signUp();
+const d = await signUp();
+const own = [1, 2].map(() => `${c.id}/${crypto.randomUUID()}.json`);
+
+for (const path of own)
+  assert.equal((await upload(c, path, json(1))).status, 200);
+
+await check('deleting an account leaves other accounts alone', async () => {
+  assert.equal((await deleteAccount(d.token)).status, 200);
+
+  for (const path of own)
+    assert.equal((await fetch(publicUrl(path))).status, 200);
+});
+await check(
+  'deleting an account deletes its links, then the account',
+  async () => {
+    const response = await deleteAccount(c.token);
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { deleted: 2 });
+
+    for (const path of own)
+      assert.equal((await fetch(publicUrl(path))).status, 400);
+
+    const user = await fetch(`${api}/auth/v1/user`, {
+      headers: { apikey: key, authorization: `Bearer ${c.token}` }
+    });
+
+    assert.ok(user.status >= 400, `${user.status}`);
+  }
+);

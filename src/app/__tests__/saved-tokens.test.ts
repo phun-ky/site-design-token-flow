@@ -257,6 +257,22 @@ describe('documents', () => {
     assert.equal(addDocument(null), null);
   });
 
+  it('adds a document with a name, tokens and a link, as opened', () => {
+    const storage = memory({ custom: VALID });
+    const added = addDocument(storage, {
+      name: ' Brand ',
+      custom: OTHER,
+      link: 'u/s.json'
+    });
+
+    assert.deepEqual(
+      { ...added, id: undefined },
+      { id: undefined, name: 'Brand', custom: OTHER, link: 'u/s.json' }
+    );
+    assert.equal(listDocuments(storage).current, added?.id);
+    assert.equal(addDocument(storage, { name: '  ' })?.name, 'Your tokens 3');
+  });
+
   it('keeps the first document when adding to nothing saved', () => {
     const storage = memory();
 

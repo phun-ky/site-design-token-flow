@@ -2,9 +2,9 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
 import { publicUrl } from '../src/app/published-links';
-import { SUPABASE_URL } from '../src/app/supabase';
 
-import { fulfill, signIn, user } from './session';
+import { signIn, user } from './session';
+import { mockStorage } from './storage';
 
 // Links for Tokens Studio (#145) against the built site, with Supabase
 // Storage mocked. The Content Security Policy still applies.
@@ -18,60 +18,6 @@ const MORE = {
   }
 };
 const LINK = new RegExp(`^${user.id}/[0-9a-f-]{36}\\.json$`);
-/** Storage that records uploads and deletes; `links` is how many exist */
-const mockStorage = async (page: Page, { links = 0, refuse = false } = {}) => {
-  const uploads: { path: string; body: unknown }[] = [];
-  const deletes: string[] = [];
-  const blocked: string[] = [];
-  const storage = `${SUPABASE_URL}/storage/v1/object/`;
-
-  page.on('console', (message) => {
-    if (message.text().includes('Content Security Policy'))
-      blocked.push(message.text());
-  });
-  await page.route(`${SUPABASE_URL}/auth/v1/user`, (route) =>
-    fulfill(route, user)
-  );
-  await page.route(
-    (url) => url.href.startsWith(storage),
-    (route) => {
-      const request = route.request();
-      const path = request.url().slice(storage.length);
-
-      if (request.method() === 'OPTIONS') return fulfill(route, {});
-
-      if (path === 'list/tokens')
-        return fulfill(
-          route,
-          Array.from({ length: links }, (_, n) => ({ name: `${n}.json` }))
-        );
-
-      if (request.method() === 'DELETE') {
-        deletes.push(
-          ...(request.postDataJSON() as { prefixes: string[] }).prefixes
-        );
-
-        return fulfill(route, []);
-      }
-
-      if (refuse)
-        return fulfill(
-          route,
-          { message: 'new row violates row-level security policy' },
-          403
-        );
-
-      uploads.push({
-        path: path.replace(/^tokens\//, ''),
-        body: request.postDataJSON()
-      });
-
-      return fulfill(route, { Key: path });
-    }
-  );
-
-  return { uploads, deletes, blocked };
-};
 /** Your tokens, typed into the playground */
 const edit = async (page: Page, tokens: unknown) => {
   await page.locator('#source').fill(JSON.stringify(tokens, null, 2));

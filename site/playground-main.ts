@@ -279,7 +279,14 @@ const announce = (message: string) => {
   requestAnimationFrame(() => (announceEl.textContent = message));
 };
 // The current document's link for Tokens Studio (#145)
-const link = mountPublishLink(store, announce);
+const link = mountPublishLink(store, announce, {
+  replace: (text) => useDocument(text),
+  // A link opened from another device (#146): a new document, now current
+  opened: () => {
+    renderDocuments();
+    loadPreset('custom');
+  }
+});
 /**
  * Shows that the tokens are being checked. It appears only when checking
  * takes more than 300 ms (a CSS animation delay), so typing doesn't flicker.
@@ -619,6 +626,8 @@ documentNameEl.addEventListener('change', () => {
   renameDocument(store, listDocuments(store).current, documentNameEl.value);
   // A blank name keeps the old one
   renderDocuments();
+  // A published link keeps the name, for opening it on another device
+  link.edited();
 });
 
 /** Deletes the current document, and shows the one that is current then */

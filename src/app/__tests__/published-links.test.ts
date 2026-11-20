@@ -2,10 +2,13 @@ import assert from 'node:assert/strict';
 import { describe, it, mock } from 'node:test';
 
 import {
-  countLinks,
+  downloadLink,
+  linkName,
+  listLinks,
   newLinkPath,
   publicUrl,
   removeLink,
+  sameJson,
   uploadLink
 } from '../published-links';
 import { SUPABASE_KEY, SUPABASE_URL } from '../supabase';
@@ -49,7 +52,10 @@ describe('uploadLink', () => {
   it('upserts the JSON as the account, cached for a minute', async () => {
     const fetch = respond(200, { Key: `tokens/${PATH}` });
 
-    assert.equal(await uploadLink('token', PATH, '{"a":1}', fetch), null);
+    assert.equal(
+      await uploadLink('token', PATH, '{"a":1}', 'Brand tökens', fetch),
+      null
+    );
 
     const sent = request(fetch);
 
@@ -61,7 +67,9 @@ describe('uploadLink', () => {
       authorization: 'Bearer token',
       'content-type': 'application/json',
       'cache-control': 'max-age=60',
-      'x-upsert': 'true'
+      'x-upsert': 'true',
+      // The name, as base64 UTF-8 JSON
+      'x-metadata': Buffer.from('{"name":"Brand tökens"}').toString('base64')
     });
   });
 
@@ -71,6 +79,7 @@ describe('uploadLink', () => {
         't',
         PATH,
         '{}',
+        'A',
         respond(403, { message: 'new row violates row-level security policy' })
       ),
       'new row violates row-level security policy'
@@ -80,6 +89,7 @@ describe('uploadLink', () => {
         't',
         PATH,
         '{}',
+        'A',
         mock.fn(async () => new Response('oops', { status: 500 }))
       ),
       '500'
@@ -101,15 +111,18 @@ describe('removeLink', () => {
   });
 });
 
-describe('countLinks', () => {
-  it('counts the JSON files in the folder of the account', async () => {
+describe('listLinks', () => {
+  it('lists the JSON files in the folder of the account', async () => {
     const fetch = respond(200, [
-      { name: 'a.json' },
+      { name: 'a.json', updated_at: '2026-11-20T10:00:00Z' },
       { name: 'b.json' },
       { name: '.emptyFolderPlaceholder' }
     ]);
 
-    assert.equal(await countLinks('token', USER, fetch), 2);
+    assert.deepEqual(await listLinks('token', USER, fetch), [
+      { path: `${USER}/a.json`, updated: '2026-11-20T10:00:00Z' },
+      { path: `${USER}/b.json`, updated: '' }
+    ]);
     assert.equal(
       request(fetch).url,
       `${SUPABASE_URL}/storage/v1/object/list/tokens`
@@ -122,8 +135,63 @@ describe('countLinks', () => {
 
   it('throws when the Storage API refuses', async () => {
     await assert.rejects(
-      countLinks('token', USER, respond(401, { message: 'jwt expired' })),
+      listLinks('token', USER, respond(401, { message: 'jwt expired' })),
       /jwt expired/
     );
+  });
+});
+
+describe('linkName', () => {
+  it('reads the name a link was published with', async () => {
+    const fetch = respond(200, { metadata: { name: 'Brand' } });
+
+    assert.equal(await linkName('token', PATH, fetch), 'Brand');
+    assert.equal(
+      request(fetch).url,
+      `${SUPABASE_URL}/storage/v1/object/info/authenticated/tokens/${PATH}`
+    );
+  });
+
+  it('is null without a name, or when refused', async () => {
+    assert.equal(
+      await linkName('t', PATH, respond(200, { metadata: {} })),
+      null
+    );
+    assert.equal(
+      await linkName('t', PATH, respond(200, { metadata: { name: 3 } })),
+      null
+    );
+    assert.equal(await linkName('t', PATH, respond(404)), null);
+  });
+});
+
+describe('downloadLink', () => {
+  it('downloads past the public cache, as the account', async () => {
+    const fetch = respond(200, { global: {} });
+
+    assert.equal(await downloadLink('token', PATH, fetch), '{"global":{}}');
+    assert.equal(
+      request(fetch).url,
+      `${SUPABASE_URL}/storage/v1/object/authenticated/tokens/${PATH}`
+    );
+    await assert.rejects(
+      downloadLink('t', PATH, respond(400, { message: 'Object not found' })),
+      /Object not found/
+    );
+  });
+});
+
+describe('sameJson', () => {
+  it('compares data, not key order or spacing', () => {
+    assert.equal(
+      sameJson(
+        '{"a":1,"b":[1,{"c":2,"d":3}]}',
+        '{ "b": [1, { "d": 3, "c": 2 }], "a": 1 }'
+      ),
+      true
+    );
+    assert.equal(sameJson('{"a":[1,2]}', '{"a":[2,1]}'), false);
+    assert.equal(sameJson('{"a":1}', '{"a":"1"}'), false);
+    assert.equal(sameJson('{', '{'), false);
   });
 });

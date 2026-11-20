@@ -94,7 +94,6 @@
               class="app-sidebar-collapse"
               aria-label="Sidebar"
               aria-controls="playground-sidebar"
-              aria-describedby="problems-title"
               aria-expanded="true"
             ></button>
           </div>
@@ -103,23 +102,22 @@
             <legend class="demo-label">Start from</legend>
             <label class="demo-source-option">
               <input type="radio" name="preset" value="showcase" />
-              <span>
-                Showcase
-                <span class="demo-muted">One token of every $type</span>
-              </span>
+              <span class="demo-source-name">Showcase</span>
+              <span class="demo-muted">Every $type</span>
             </label>
             <label class="demo-source-option">
               <input type="radio" name="preset" value="bundled" />
-              <span>
-                Example file
-                <span class="demo-muted" id="bundled-count"></span>
-              </span>
+              <span class="demo-source-name">Example file</span>
+              <span class="demo-muted" id="bundled-count"></span>
             </label>
             <!-- Your documents (#149), one option each, from playground-main.ts -->
             <div class="demo-documents" id="documents"></div>
             <button type="button" class="demo-button" id="new-document">
               New document
             </button>
+            <p class="demo-hint" id="documents-hint" hidden>
+              Your browser blocks storage, so your documents are not kept
+            </p>
           </fieldset>
 
           <p class="demo-undo" id="undo" hidden>
@@ -141,127 +139,157 @@
             <ul></ul>
           </section>
           <p class="demo-hint" id="elsewhere-status" role="status"></p>
+        </aside>
 
-          <div class="demo-document" id="document" hidden>
-            <label class="demo-field" for="document-name">
-              <span class="demo-label">Document name</span>
+        <!-- The open document and its tools (#162) -->
+        <section class="demo-panel demo-editor" aria-labelledby="json-title">
+          <div class="demo-panel-head">
+            <h2 id="json-title">Token JSON</h2>
+            <span id="saved" class="demo-muted"></span>
+            <span id="checking" class="demo-busy" role="status"></span>
+          </div>
+          <div class="demo-toolbar">
+            <div class="demo-document" id="document" hidden>
               <input
                 id="document-name"
                 type="text"
                 autocomplete="off"
                 spellcheck="false"
+                aria-label="Document name"
               />
-            </label>
-            <section class="demo-publish" aria-labelledby="link-title">
-              <h2 class="demo-label" id="link-title">Link for Tokens Studio</h2>
-              <p class="demo-hint" id="link-hint"></p>
-              <div
-                class="demo-conflict"
-                id="link-conflict"
-                role="group"
-                aria-labelledby="link-conflict-text"
-                hidden
+              <button
+                type="button"
+                class="demo-button"
+                id="link-open"
+                popovertarget="link-menu"
               >
-                <p class="demo-hint" id="link-conflict-text">
-                  The published version differs from this one, perhaps edited on
-                  another device. Your edits don't update it until you choose.
-                </p>
-                <div class="demo-publish-actions">
-                  <button
-                    type="button"
-                    class="demo-button"
-                    id="link-use-published"
-                  >
-                    Use the published version
-                  </button>
-                  <button type="button" class="demo-button" id="link-keep">
-                    Keep this version
-                  </button>
-                </div>
-              </div>
-              <div class="demo-publish-url" id="link-published" hidden>
-                <input
-                  id="link-url"
-                  type="text"
-                  readonly
-                  aria-labelledby="link-title"
-                />
-                <button type="button" class="demo-button" id="link-copy">
-                  Copy link
-                </button>
-              </div>
-              <div class="demo-publish-actions">
-                <button type="button" class="demo-button" id="link-publish">
-                  Publish link
-                </button>
-                <button type="button" class="demo-button" id="link-change">
-                  Change link
-                </button>
-                <button type="button" class="demo-button" id="link-unpublish">
-                  Unpublish
-                </button>
-              </div>
-              <p class="demo-hint" id="link-status" role="status"></p>
-            </section>
-            <button type="button" class="demo-button" id="delete-document">
-              Delete document
-            </button>
+                Link
+              </button>
+              <button
+                type="button"
+                class="demo-icon-button"
+                id="delete-document"
+                aria-label="Delete document"
+                title="Delete document"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M3 6h18" />
+                  <path d="M8 6V4h8v2" />
+                  <path d="M19 6l-1 14H6L5 6" />
+                </svg>
+              </button>
+            </div>
+            <div class="demo-toolbar-files">
+              <button type="button" id="load-file" class="demo-button">
+                Load files
+              </button>
+              <input
+                id="file"
+                type="file"
+                accept=".json,application/json"
+                aria-label="Token files"
+                multiple
+                hidden
+              />
+              <button type="button" id="export-open" class="demo-button">
+                Export
+              </button>
+            </div>
           </div>
-
-          <div class="demo-drop" id="drop">
-            <svg
-              class="demo-drop-icon"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M12 15V3" />
-              <path d="m7 8 5-5 5 5" />
-              <path d="M20 15v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4" />
-            </svg>
-            <p class="demo-drop-title">Drop token files here</p>
-            <button type="button" id="load-file" class="demo-button">
-              Load files
-            </button>
-            <input
-              id="file"
-              type="file"
-              accept=".json,application/json"
-              aria-label="Token files"
-              multiple
+          <section
+            class="demo-publish"
+            id="link-menu"
+            popover
+            aria-labelledby="link-title"
+          >
+            <h2 class="demo-label" id="link-title">Link for Tokens Studio</h2>
+            <p class="demo-hint" id="link-hint"></p>
+            <div
+              class="demo-conflict"
+              id="link-conflict"
+              role="group"
+              aria-labelledby="link-conflict-text"
               hidden
-            />
-            <p class="demo-muted demo-drop-hint">
-              DTCG or Tokens Studio JSON up to 2 MB in all, read in your browser
-              and never uploaded
-            </p>
-          </div>
+            >
+              <p class="demo-hint" id="link-conflict-text">
+                The published version differs from this one, perhaps edited on
+                another device. Your edits don't update it until you choose.
+              </p>
+              <div class="demo-publish-actions">
+                <button
+                  type="button"
+                  class="demo-button"
+                  id="link-use-published"
+                >
+                  Use the published version
+                </button>
+                <button type="button" class="demo-button" id="link-keep">
+                  Keep this version
+                </button>
+              </div>
+            </div>
+            <div class="demo-publish-url" id="link-published" hidden>
+              <input
+                id="link-url"
+                type="text"
+                readonly
+                aria-labelledby="link-title"
+              />
+              <button type="button" class="demo-button" id="link-copy">
+                Copy link
+              </button>
+            </div>
+            <div class="demo-publish-actions">
+              <button type="button" class="demo-button" id="link-publish">
+                Publish link
+              </button>
+              <button type="button" class="demo-button" id="link-change">
+                Change link
+              </button>
+              <button type="button" class="demo-button" id="link-unpublish">
+                Unpublish
+              </button>
+            </div>
+            <p class="demo-hint" id="link-status" role="status"></p>
+          </section>
           <div id="file-status" class="demo-file-status" role="status"></div>
-          <button type="button" id="export-open" class="demo-button">
-            Export
-          </button>
-
-          <label class="demo-field" for="prefix">
-            <span class="demo-label">Prefix</span>
-            <input
-              id="prefix"
-              type="text"
-              value="$"
-              size="3"
-              aria-describedby="prefix-hint"
-            />
-            <span id="prefix-hint" class="demo-hint">
-              Shown before each token name, like <code>$</code> in
-              <code>$color-cta</code>
-            </span>
-          </label>
-
+          <!-- The highlighted copy sits under the textarea, which shows the caret -->
+          <div class="demo-source">
+            <div class="demo-source-code" aria-hidden="true"></div>
+            <textarea
+              id="source"
+              spellcheck="false"
+              aria-label="Design tokens JSON"
+            ></textarea>
+            <!-- While files are dragged over the playground, which takes them anywhere -->
+            <div class="demo-drop" id="drop" aria-hidden="true">
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M12 15V3" />
+                <path d="m7 8 5-5 5 5" />
+                <path d="M20 15v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4" />
+              </svg>
+              Drop token files to load them
+            </div>
+          </div>
           <section
             id="error"
             class="demo-problems"
@@ -276,32 +304,10 @@
               Revert to the last version without problems
             </button>
           </section>
-
-          <p id="to-flow" class="demo-flow" hidden>
-            <a class="demo-button demo-button-primary" href="./">
-              Show in the flow
-            </a>
-            <span id="to-flow-hint" class="demo-muted" hidden>
-              The flow shows your last version without problems
-            </span>
+          <p class="demo-muted demo-drop-hint">
+            Load or drop DTCG or Tokens Studio JSON, up to 2 MB in all, read in
+            your browser and never uploaded
           </p>
-        </aside>
-
-        <section class="demo-panel demo-editor" aria-labelledby="json-title">
-          <div class="demo-panel-head">
-            <h2 id="json-title">Token JSON</h2>
-            <span id="saved" class="demo-muted"></span>
-            <span id="checking" class="demo-busy" role="status"></span>
-          </div>
-          <!-- The highlighted copy sits under the textarea, which shows the caret -->
-          <div class="demo-source">
-            <div class="demo-source-code" aria-hidden="true"></div>
-            <textarea
-              id="source"
-              spellcheck="false"
-              aria-label="Design tokens JSON"
-            ></textarea>
-          </div>
         </section>
 
         <section class="demo-panel demo-output" aria-labelledby="pills-title">
@@ -323,6 +329,27 @@
               placeholder="Filter by name or $type"
               aria-label="Filter tokens"
             />
+            <label class="demo-prefix" for="prefix">
+              Prefix
+              <input
+                id="prefix"
+                type="text"
+                value="$"
+                size="3"
+                aria-describedby="prefix-hint"
+              />
+              <span id="prefix-hint" class="visually-hidden">
+                Shown before each token name, like $ in $color-cta
+              </span>
+            </label>
+            <span id="to-flow" class="demo-flow" hidden>
+              <a class="demo-button demo-button-primary" href="./">
+                Show in the flow
+              </a>
+              <span id="to-flow-hint" class="demo-muted" hidden>
+                The flow shows your last version without problems
+              </span>
+            </span>
           </div>
           <div id="groups"></div>
         </section>

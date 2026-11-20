@@ -87,13 +87,17 @@ for (const choice of ['Use the published version', 'Keep this version'])
     await page.goto('playground');
 
     const conflict = page.locator('#link-conflict');
+    // The toolbar's button says so; the popover asks (#162)
+    const open = page.getByRole('button', { name: 'Changed elsewhere' });
 
-    await expect(conflict).toBeVisible();
+    await expect(open).toBeVisible();
     // Nothing is uploaded while you choose, not even after an edit
     await page.locator('#source').fill(BLUE.replace('blue', 'navy'));
     await page.waitForTimeout(2500);
     expect(uploads).toEqual([]);
 
+    await open.click();
+    await expect(conflict).toBeVisible();
     await conflict.getByRole('button', { name: choice }).click();
     await expect(conflict).toBeHidden();
 

@@ -73,8 +73,8 @@ h3 code {
   outline: none;
 }
 
-/* Where the tokens come from: the source, a file, the prefix, the problems
-   and the way to the flow (#110) */
+/* What to edit: the examples and your documents (#162); the tools for the
+   open one are on the editor */
 .demo-sidebar {
   display: flex;
   flex-direction: column;
@@ -111,45 +111,18 @@ h3 code {
     overflow: hidden;
   }
 
-  .sidebar-collapsed
-    .demo-sidebar
-    > :not(.demo-sidebar-bar, #file-status, #error) {
+  .sidebar-collapsed .demo-sidebar > :not(.demo-sidebar-bar) {
     display: none;
   }
 
-  /* Still the page's heading, the sidebar's name, and what a file or your
-     edits did, announced as before: off screen, not gone */
-  .sidebar-collapsed .demo-sidebar h1,
-  .sidebar-collapsed .demo-sidebar #file-status,
-  .sidebar-collapsed .demo-sidebar #error {
+  /* Still the page's heading and the sidebar's name: off screen, not gone */
+  .sidebar-collapsed .demo-sidebar h1 {
     position: absolute;
     width: 1px;
     height: 1px;
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
-  }
-
-  /* Problems while collapsed: a dot on the button, which the problems'
-     title describes */
-  .sidebar-collapsed
-    .demo-sidebar:has(#error:not([hidden]))
-    .app-sidebar-collapse {
-    position: relative;
-  }
-
-  .sidebar-collapsed
-    .demo-sidebar:has(#error:not([hidden]))
-    .app-sidebar-collapse::after {
-    position: absolute;
-    top: -4px;
-    right: -4px;
-    width: 10px;
-    height: 10px;
-    border: 2px solid var(--demo-panel);
-    border-radius: 50%;
-    background: var(--demo-error);
-    content: '';
   }
 }
 
@@ -180,11 +153,12 @@ h3 code {
 .demo-sources legend {
   margin-bottom: 0.5rem;
 }
+/* One line each: the name, and only what stands out about it */
 .demo-source-option {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 0.625rem;
-  padding: 0.5rem 0.625rem;
+  padding: 0.375rem 0.625rem;
   border-radius: 8px;
   cursor: pointer;
 }
@@ -192,11 +166,18 @@ h3 code {
   background: var(--app-hover);
 }
 .demo-source-option input {
-  margin: 0.2rem 0 0;
+  margin: 0;
   accent-color: var(--demo-accent);
 }
+.demo-source-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .demo-source-option .demo-muted {
-  display: block;
+  flex: none;
   font-size: 0.75rem;
 }
 
@@ -208,23 +189,75 @@ h3 code {
   align-self: flex-start;
   margin-top: 0.25rem;
 }
+.demo-sources > .demo-hint {
+  margin: 0.25rem 0 0;
+}
+
+/* The open document's tools, over the editor (#162): its name, link and
+   delete for your documents, then loading and exporting files */
+.demo-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
 .demo-document {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.75rem;
+  flex: 1 1 14rem;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
 }
 .demo-document[hidden] {
   display: none;
 }
-.demo-document .demo-field {
-  align-self: stretch;
+.demo-document input {
+  flex: 1;
+  min-width: 0;
+  min-height: 2.25rem;
 }
-/* A document's link for Tokens Studio (#145) */
+.demo-toolbar-files {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+/* How the link stands, at a glance */
+#link-open[data-state='published']::before,
+#link-open[data-state='conflict']::before {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--demo-ok);
+  content: '';
+}
+#link-open[data-state='conflict']::before {
+  background: var(--demo-error);
+}
+
+/* A document's link for Tokens Studio (#145), in a popover under its button;
+   the playground sets --x and --y as it opens */
 .demo-publish {
+  position: fixed;
+  inset: auto;
+  top: var(--y, 8rem);
+  left: clamp(
+    0.5rem,
+    var(--x, 0.5rem),
+    100vw - min(22rem, 100vw - 1rem) - 0.5rem
+  );
+  width: min(22rem, calc(100vw - 1rem));
+  margin: 0;
+  padding: 1rem;
+  border: 1px solid var(--demo-border);
+  border-radius: 12px;
+  background: var(--demo-panel);
+  color: var(--demo-text);
+  box-shadow: var(--app-shadow);
+}
+.demo-publish:popover-open {
   display: flex;
   flex-direction: column;
-  align-self: stretch;
   gap: 0.5rem;
 }
 .demo-publish h2 {
@@ -273,7 +306,8 @@ h3 code {
   display: none;
 }
 .demo-problems > .demo-button {
-  margin-top: 0.5rem;
+  align-self: flex-start;
+  margin-top: 0.25rem;
 }
 .demo-problems > .demo-button[hidden] {
   display: none;
@@ -400,30 +434,27 @@ h3 code {
   background: var(--app-hover);
 }
 
-/* The drop zone; the whole playground takes a dropped file */
+/* Over the editor while files are dragged; the whole playground takes them */
 .demo-drop {
-  display: flex;
+  display: none;
+  z-index: 1;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  padding: 1.125rem 0.875rem;
-  border: 1.5px dashed var(--app-border);
-  border-radius: 12px;
-  text-align: center;
+  border: 2px dashed var(--demo-accent);
+  border-radius: 8px;
+  background: var(--demo-panel);
+  color: var(--demo-accent);
+  font-weight: 600;
+  pointer-events: none;
 }
 .demo-drop.is-dropping {
-  border: 2px solid var(--demo-accent);
-  background: var(--app-hover);
+  display: flex;
 }
-.demo-drop-icon {
-  color: var(--demo-accent);
-}
-.demo-drop-title {
-  margin: 0;
-  font-weight: 600;
-}
+/* Under the editor: what files it reads, and that they stay here */
 .demo-drop-hint {
-  margin: 0;
+  margin: 0.5rem 0 0;
   font-size: 0.75rem;
 }
 
@@ -436,6 +467,9 @@ h3 code {
 }
 .demo-file-status:empty {
   display: none;
+}
+.demo-editor > .demo-file-status {
+  margin-bottom: 0.75rem;
 }
 .demo-file-status p {
   margin: 0;
@@ -493,11 +527,12 @@ h3 code {
   color: var(--demo-muted);
 }
 
-/* The problems: each moves the editor to its line */
+/* The problems, under the editor: each moves the editor to its line */
 .demo-problems:not([hidden]) {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  margin-top: 0.75rem;
 }
 .demo-problems .demo-label {
   color: var(--demo-error);
@@ -505,8 +540,10 @@ h3 code {
 .demo-problems ul {
   display: grid;
   gap: 0.375rem;
+  max-height: 11rem;
   margin: 0;
   padding: 0;
+  overflow: auto;
   list-style: none;
   font-size: 0.75rem;
 }
@@ -798,14 +835,23 @@ select:hover {
   letter-spacing: 0;
 }
 
-/* Under the sidebar: the way to the flow */
-.demo-flow:not([hidden]) {
-  display: flex;
-  flex-direction: column;
+/* In the pills' header: the prefix, and the way to the flow (#162) */
+.demo-prefix {
+  display: inline-flex;
+  align-items: center;
   gap: 0.375rem;
-  margin: auto 0 0;
+  color: var(--demo-muted);
   font-size: 0.75rem;
-  text-align: center;
+}
+.demo-panel-head .demo-prefix input {
+  flex: none;
+  width: 3.5rem;
+}
+.demo-flow:not([hidden]) {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 /* The details of the selected pill */

@@ -1,5 +1,5 @@
-// A document's link for Tokens Studio (#145), under its name in the
-// playground's sidebar: publish, copy, change and unpublish, and keep it up to
+// A document's link for Tokens Studio (#145), in a popover from the editor's
+// toolbar (#162): publish, copy, change and unpublish, and keep it up to
 // date about 2 seconds after the last edit without problems. Links published
 // on another device can be opened here (#146), and a link changed elsewhere
 // isn't overwritten without asking.
@@ -42,6 +42,7 @@ const time = () =>
  * @param {object} playground What the playground does for it
  * @param {(text: string) => Promise<unknown>} playground.replace Puts JSON in the editor as the current document
  * @param {() => void} playground.opened Shows a document just added, as current
+ * @param {() => void} playground.changed After a link is published, changed or unpublished
  * @returns The playground's handles: `show` after switching documents,
  * `edited` after a version without problems is saved, and `unpublish` for a
  * document being deleted
@@ -51,12 +52,15 @@ export const mountPublishLink = (
   announce: (message: string) => void,
   {
     replace,
-    opened
+    opened,
+    changed
   }: {
     replace: (text: string) => Promise<unknown>;
     opened: () => void;
+    changed: () => void;
   }
 ) => {
+  const openEl = $<HTMLButtonElement>('#link-open');
   const hintEl = $<HTMLParagraphElement>('#link-hint');
   const publishedEl = $<HTMLDivElement>('#link-published');
   const urlEl = $<HTMLInputElement>('#link-url');
@@ -153,6 +157,16 @@ export const mountPublishLink = (
     changeEl.disabled = busy || !valid;
     unpublishEl.disabled = busy;
     conflictEl.hidden = conflict === null || conflict !== currentDocument().id;
+
+    // The toolbar's button says how the link stands, the popover the rest
+    const state = conflictEl.hidden ? (link ? 'published' : '') : 'conflict';
+
+    openEl.dataset.state = state;
+    openEl.textContent = {
+      conflict: 'Changed elsewhere',
+      published: 'Published',
+      '': 'Publish'
+    }[state];
     usePublishedEl.disabled = busy;
     keepEl.disabled = busy;
     hintEl.textContent = !signedIn
@@ -234,6 +248,7 @@ export const mountPublishLink = (
       if (failed) return failed;
 
       setDocumentLink(store, id, path);
+      changed();
       published('Published the link for Tokens Studio');
       void loadElsewhere();
 
@@ -253,6 +268,7 @@ export const mountPublishLink = (
       if (removed) return removed;
 
       setDocumentLink(store, id, undefined);
+      changed();
 
       const path = newLinkPath(user.id);
       const failed = await uploadLink(
@@ -265,6 +281,7 @@ export const mountPublishLink = (
       if (failed) return `the old link is unpublished: ${failed}`;
 
       setDocumentLink(store, id, path);
+      changed();
       published('Changed the link for Tokens Studio');
       void loadElsewhere();
 
@@ -282,6 +299,7 @@ export const mountPublishLink = (
       if (failed) return failed;
 
       setDocumentLink(store, id, undefined);
+      changed();
       statusEl.textContent = 'Unpublished: the link no longer works';
       announce('Unpublished the link');
       void loadElsewhere();

@@ -16,11 +16,18 @@ import { formatHtml } from '../src/app/format-html';
 import { mountHeader } from '../src/app/header';
 import type { Colorize } from '../src/app/highlight';
 import {
+  addDocument,
   browserStorage,
   chooseFlowTokens,
+  deleteDocument,
+  listDocuments,
   readSaved,
+  renameDocument,
+  restoreDocument,
+  switchDocument,
   writeSaved,
-  type Preset
+  type Preset,
+  type SavedDocument
 } from '../src/app/saved-tokens';
 import { mountSidebarCollapse } from '../src/app/sidebar';
 import {
@@ -42,6 +49,7 @@ import {
 
 import { runImportWizard } from './import-wizard';
 import { mountNewTokenForm } from './new-token-form';
+import { mountPublishLink } from './publish-link';
 import showcaseTokens from './showcase.tokens.json';
 import type { CheckRequest, CheckResponse } from './validate-worker';
 
@@ -54,17 +62,32 @@ const $ = <T extends HTMLElement>(selector: string) =>
 const sourceEl = $<HTMLTextAreaElement>('#source');
 const sourceBoxEl = $<HTMLElement>('.demo-source');
 const sourceCodeEl = $<HTMLElement>('.demo-source-code');
-const presetEls = [
+// The presets and your documents, which change as you add and delete them
+const presetEls = () => [
   ...document.querySelectorAll<HTMLInputElement>('input[name="preset"]')
 ];
+const sourcesEl = $<HTMLFieldSetElement>('.demo-sources');
 const bundledCountEl = $<HTMLSpanElement>('#bundled-count');
-const customCountEl = $<HTMLSpanElement>('#custom-count');
+const documentsEl = $<HTMLDivElement>('#documents');
+const documentsHintEl = $<HTMLParagraphElement>('#documents-hint');
+const documentEl = $<HTMLDivElement>('#document');
+const documentNameEl = $<HTMLInputElement>('#document-name');
+const newDocumentEl = $<HTMLButtonElement>('#new-document');
+const deleteDocumentEl = $<HTMLButtonElement>('#delete-document');
+const deleteEl = $<HTMLDialogElement>('#delete');
+const undoEl = $<HTMLParagraphElement>('#undo');
+const undoTextEl = $<HTMLSpanElement>('#undo-text');
+const undoButtonEl = $<HTMLButtonElement>('#undo-button');
+const revertEl = $<HTMLButtonElement>('#revert');
+const deleteNameEl = $<HTMLSpanElement>('#delete-name');
+const deleteUnpublishFieldEl = $<HTMLLabelElement>('#delete-unpublish-field');
+const deleteUnpublishEl = $<HTMLInputElement>('#delete-unpublish');
 const prefixEl = $<HTMLInputElement>('#prefix');
 const filterEl = $<HTMLInputElement>('#filter');
 const problemsEl = $<HTMLElement>('#error');
 const problemsTitleEl = $<HTMLSpanElement>('#problems-title');
 const problemsListEl = problemsEl.querySelector('ul') as HTMLUListElement;
-const flowLinkEl = $<HTMLParagraphElement>('#to-flow');
+const flowLinkEl = $<HTMLElement>('#to-flow');
 const flowHintEl = $<HTMLSpanElement>('#to-flow-hint');
 const savedEl = $<HTMLSpanElement>('#saved');
 const checkingEl = $<HTMLSpanElement>('#checking');
@@ -105,9 +128,91 @@ const escape = (value: string) =>
 const plural = (count: number, word: string) =>
   `${count} ${word}${count === 1 ? '' : 's'}`;
 const preset = (): Preset =>
-  (presetEls.find((input) => input.checked)?.value as Preset) ?? 'showcase';
-const setPreset = (value: Preset) =>
-  presetEls.forEach((input) => (input.checked = input.value === value));
+  (presetEls().find((input) => input.checked)?.value as Preset) ?? 'showcase';
+/** Checks a preset, or for your tokens the current document */
+const setPreset = (value: Preset) => {
+  const { documents, current } = listDocuments(store);
+
+  presetEls().forEach(
+    (input) =>
+      (input.checked =
+        input.value === value &&
+        (value !== 'custom' || input.dataset.document === current))
+  );
+  documentEl.hidden = value !== 'custom';
+  documentNameEl.value = documents.find(({ id }) => id === current)?.name ?? '';
+};
+/** What a document's option says about it, on its line: only what stands out */
+const documentDetail = (document: SavedDocument) => {
+  if (document.custom === undefined) return 'Empty';
+
+  return document.link ? 'Published' : '';
+};
+/** An option for each of your documents, and the current one's name */
+const renderDocuments = () => {
+  const { documents } = listDocuments(store);
+  const checked = preset();
+
+  documentsEl.replaceChildren(
+    ...documents.map((saved) => {
+      const label = document.createElement('label');
+      const input = document.createElement('input');
+      const name = document.createElement('span');
+      const detail = document.createElement('span');
+
+      label.className = 'demo-source-option';
+      input.type = 'radio';
+      input.name = 'preset';
+      input.value = 'custom';
+      input.dataset.document = saved.id;
+      name.className = 'demo-source-name';
+      name.textContent = saved.name;
+      detail.className = 'demo-muted';
+      detail.dataset.detail = saved.id;
+      detail.textContent = documentDetail(saved);
+      label.append(input, name, detail);
+
+      return label;
+    })
+  );
+  documentsHintEl.hidden = Boolean(store);
+  setPreset(checked);
+};
+const PRESET_NAMES = { showcase: 'Showcase', bundled: 'Example file' };
+/**
+ * Saves JSON as your tokens. While a preset is chosen it starts a new
+ * document (#156), so none of yours is overwritten; an empty current
+ * document, such as on a first visit, is used as it is.
+ *
+ * @param {string} text The JSON
+ * @param {string} [name] The new document's name; "Showcase copy" without one
+ * @returns {boolean} Whether it was saved
+ */
+const saveAsYours = (text: string, name?: string) => {
+  const chosen = preset();
+  const { custom = '{}' } = readSaved(store);
+
+  if (chosen !== 'custom' && custom.trim() !== '{}') {
+    const added = addDocument(store, {
+      name: name ?? `${PRESET_NAMES[chosen]} copy`,
+      custom: text
+    });
+
+    if (added) {
+      renderDocuments();
+      setPreset('custom');
+      writeSaved(store, { preset: 'custom' });
+      link.show();
+      announce(`Started ${added.name}, a new document`);
+
+      return true;
+    }
+  }
+
+  setPreset('custom');
+
+  return writeSaved(store, { preset: 'custom', custom: text });
+};
 
 // Syntax highlighting, once Shiki has loaded; plain text until then
 let colorize: Colorize | null = null;
@@ -215,6 +320,17 @@ const announce = (message: string) => {
   announceEl.textContent = '';
   requestAnimationFrame(() => (announceEl.textContent = message));
 };
+// The current document's link for Tokens Studio (#145)
+const link = mountPublishLink(store, announce, {
+  replace: (text) => useDocument(text),
+  // A link opened from another device (#146): a new document, now current
+  opened: () => {
+    renderDocuments();
+    loadPreset('custom');
+  },
+  // Published or not shows on the document's line
+  changed: () => showSaved()
+});
 /**
  * Shows that the tokens are being checked. It appears only when checking
  * takes more than 300 ms (a CSS animation delay), so typing doesn't flicker.
@@ -236,9 +352,16 @@ const goToLine = (line: number) => {
   sourceEl.setSelectionRange(start, start + (lines[line - 1]?.length ?? 0));
   sourceEl.scrollTop = Math.max(0, (line - 3) * lineHeight);
 };
-/** Lists the problems in the sidebar, each moving the editor to its line */
+/** Lists the problems under the editor, each moving the editor to its line */
 const showProblems = () => {
+  const { valid } = readSaved(store);
+
   problemsEl.hidden = problems.length === 0;
+  revertEl.hidden =
+    problems.length === 0 ||
+    preset() !== 'custom' ||
+    !valid ||
+    valid === sourceEl.value;
   problemsTitleEl.textContent = `${plural(problems.length, 'problem')} in the tokens`;
   problemsListEl.replaceChildren(
     ...problems.map((problem) => {
@@ -266,15 +389,17 @@ const showProblems = () => {
     })
   );
 };
-/** What the sidebar says about your tokens, and whether they are saved */
+/** What the documents' lines say about them, and whether they are saved */
 const showSaved = () => {
-  const saved = readSaved(store);
+  // In place, so focus stays on an option while you move between them
+  for (const saved of listDocuments(store).documents) {
+    const detail = documentsEl.querySelector(
+      `[data-detail="${CSS.escape(saved.id)}"]`
+    );
 
-  customCountEl.textContent = !store
-    ? 'Your browser blocks storage, so they are not kept'
-    : saved.custom === undefined
-      ? 'None yet: type, paste or load a file'
-      : 'Saved in this browser';
+    if (detail) detail.textContent = documentDetail(saved);
+  }
+
   savedEl.textContent =
     preset() !== 'custom'
       ? 'Editing it starts your own tokens'
@@ -303,8 +428,11 @@ const apply = (checked: CheckedTokens, text: string) => {
     problems.length === 0 &&
     tokens.length > 0 &&
     readSaved(store).custom === text
-  )
+  ) {
     writeSaved(store, { valid: text });
+    // and the version a published link serves, once you stop typing
+    link.edited();
+  }
 
   showProblems();
   render();
@@ -507,6 +635,7 @@ const loadPreset = (value: Preset) => {
       : JSON.stringify(PRESETS[value], null, 2);
   setPreset(value);
   writeSaved(store, { preset: value });
+  link.show();
   void parse();
   updateSource();
 };
@@ -515,14 +644,147 @@ let parseTimer: number | undefined;
 
 sourceEl.addEventListener('input', () => {
   updateSource();
-  setPreset('custom');
-  writeSaved(store, { preset: 'custom', custom: sourceEl.value });
+  saveAsYours(sourceEl.value);
   window.clearTimeout(parseTimer);
   parseTimer = window.setTimeout(() => void parse(), 250);
 });
-presetEls.forEach((input) =>
-  input.addEventListener('change', () => loadPreset(input.value as Preset))
-);
+sourcesEl.addEventListener('change', (event) => {
+  const input = event.target as HTMLInputElement;
+
+  if (input.name !== 'preset') return;
+
+  if (input.dataset.document) switchDocument(store, input.dataset.document);
+
+  loadPreset(input.value as Preset);
+});
+newDocumentEl.addEventListener('click', () => {
+  const added = addDocument(store);
+
+  if (!added) {
+    announce('Your browser blocks storage, so a new document is not kept');
+
+    return;
+  }
+
+  renderDocuments();
+  loadPreset('custom');
+  announce(`Added ${added.name}`);
+  documentNameEl.focus();
+  documentNameEl.select();
+});
+documentNameEl.addEventListener('change', () => {
+  renameDocument(store, listDocuments(store).current, documentNameEl.value);
+  // A blank name keeps the old one
+  renderDocuments();
+  // A published link keeps the name, for opening it on another device
+  link.edited();
+});
+
+/** Deletes the current document, and shows the one that is current then */
+/** How long a deleted document can be restored (#156) */
+const UNDO_TIME = 10_000;
+
+let undo: {
+  document: SavedDocument;
+  index: number;
+  unpublish: boolean;
+  timer: number;
+} | null = null;
+
+/** Ends the undo of the last delete: its link is unpublished only now */
+const finishUndo = () => {
+  if (!undo) return;
+
+  const { document, unpublish, timer } = undo;
+
+  window.clearTimeout(timer);
+  undo = null;
+  undoEl.hidden = true;
+  link.hold(null);
+
+  if (unpublish && link.canUnpublish(document)) void link.unpublish(document);
+};
+/** Deletes the current document, and offers to undo it for a while */
+const removeDocument = (unpublish: boolean) => {
+  finishUndo();
+
+  const { documents, current } = listDocuments(store);
+  const index = documents.findIndex(({ id }) => id === current);
+  const saved = documents[index];
+
+  deleteDocument(store, current);
+  undo = {
+    document: saved,
+    index,
+    unpublish,
+    timer: window.setTimeout(finishUndo, UNDO_TIME)
+  };
+  // Not listed as published elsewhere while it can come back
+  link.hold(saved.link ?? null);
+  renderDocuments();
+  loadPreset('custom');
+  undoTextEl.textContent = `Deleted ${saved.name}.`;
+  undoEl.hidden = false;
+  announce(`Deleted ${saved.name}. You can undo it for 10 seconds.`);
+  presetEls()
+    .find((input) => input.checked)
+    ?.focus();
+};
+
+undoButtonEl.addEventListener('click', () => {
+  if (!undo) return;
+
+  const { document, index, timer } = undo;
+
+  window.clearTimeout(timer);
+  undo = null;
+  undoEl.hidden = true;
+  link.hold(null);
+  restoreDocument(store, document, index);
+  renderDocuments();
+  loadPreset('custom');
+  announce(`Restored ${document.name}`);
+  presetEls()
+    .find((input) => input.checked)
+    ?.focus();
+});
+// Revert: the last version without problems, which each document keeps
+revertEl.addEventListener('click', () => {
+  const { valid } = readSaved(store);
+
+  if (!valid) return;
+
+  void useDocument(valid).then(() =>
+    announce('Reverted to the last version without problems')
+  );
+});
+
+deleteDocumentEl.addEventListener('click', () => {
+  const { documents, current } = listDocuments(store);
+  const saved = documents.find(({ id }) => id === current);
+
+  // Only ask when there are tokens or a link to lose
+  if ((saved?.custom ?? '{}').trim() === '{}' && !saved?.link) {
+    removeDocument(false);
+
+    return;
+  }
+
+  // Unpublishing needs signing in; signed out, the link stays published
+  deleteUnpublishFieldEl.hidden = !saved || !link.canUnpublish(saved);
+  deleteUnpublishEl.checked = true;
+  deleteNameEl.textContent = `"${saved?.name}"`;
+  deleteEl.returnValue = '';
+  deleteEl.showModal();
+});
+deleteEl.addEventListener('close', () => {
+  if (deleteEl.returnValue === 'delete')
+    removeDocument(!deleteUnpublishFieldEl.hidden && deleteUnpublishEl.checked);
+});
+// The backdrop cancels, like Esc and Cancel
+deleteEl.addEventListener('click', (event) => {
+  if (event.target === deleteEl) deleteEl.close('cancel');
+});
 
 /**
  * Says what happened to a file, or how far loading it has come, under the
@@ -636,13 +898,12 @@ const yourTokens = () => {
   }
 };
 /** Puts a document in the editor as your tokens, checked and saved */
-const useDocument = async (text: string) => {
+const useDocument = async (text: string, name?: string) => {
   window.clearTimeout(parseTimer);
   sourceEl.value = text;
   sourceEl.scrollTop = 0;
-  setPreset('custom');
 
-  const saved = writeSaved(store, { preset: 'custom', custom: text });
+  const saved = saveAsYours(text, name);
 
   updateSource();
   await parse();
@@ -757,7 +1018,11 @@ const loadFile = async (
       steps: steps(2)
     });
 
-    const saved = await useDocument(loadText);
+    // A new document, named after the file, when a preset is chosen
+    const saved = await useDocument(
+      loadText,
+      file.name.replace(/(\.tokens)?\.json$/i, '')
+    );
     const summary = `${plural(tokens.length, 'token')}${problems.length ? `, ${plural(problems.length, 'problem')}` : ''}`;
 
     showFileStatus(
@@ -988,6 +1253,19 @@ groupsEl.addEventListener('mouseleave', () => {
   highlight(selectedId);
 });
 
+// The link's popover opens under its button in the editor's toolbar (#162);
+// the CSS keeps it on screen
+const linkMenuEl = $<HTMLElement>('#link-menu');
+
+linkMenuEl.addEventListener('beforetoggle', (event) => {
+  if ((event as ToggleEvent).newState !== 'open') return;
+
+  const { bottom, left } = $<HTMLElement>('#link-open').getBoundingClientRect();
+
+  linkMenuEl.style.setProperty('--x', `${left}px`);
+  linkMenuEl.style.setProperty('--y', `${bottom + 6}px`);
+});
+
 mountHeader();
 // On a wide screen the sidebar collapses to a rail; the panels take the space (#120)
 mountSidebarCollapse(
@@ -1000,6 +1278,7 @@ bundledCountEl.textContent = plural(
   countTokens(JSON.stringify(bundledTokens)),
   'token'
 );
+renderDocuments();
 loadPreset(readSaved(store).preset ?? 'showcase');
 
 // Shiki loads after the page, in its own chunk; the page works without it

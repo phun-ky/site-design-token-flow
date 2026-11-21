@@ -12,6 +12,7 @@
   --app-brand: #8b98ff;
   --app-hover: rgba(101, 117, 133, 0.16);
   --app-shadow: 0 2px 10px rgba(0, 0, 0, 0.32);
+  --app-backdrop: rgba(0, 0, 0, 0.6);
   --app-switch-bg: rgba(101, 117, 133, 0.16);
   --app-switch-knob: #000;
   --app-switch-knob-shadow:
@@ -30,6 +31,7 @@
   --app-brand: #5365f3;
   --app-hover: rgba(142, 150, 170, 0.14);
   --app-shadow: 0 2px 10px rgba(104, 108, 123, 0.25);
+  --app-backdrop: rgba(27, 27, 31, 0.45);
   --app-switch-bg: rgba(142, 150, 170, 0.14);
   --app-switch-knob: #fff;
   color-scheme: light;
@@ -457,6 +459,106 @@ body {
 }
 .app-theme-switch[aria-checked='true'] .app-theme-switch-moon {
   visibility: visible;
+}
+/* Account menu (#144): "Sign in" or the account's name, opening a popover */
+.app-account {
+  margin-left: 16px;
+}
+.app-account-button,
+.app-account-action {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+  background-color: transparent;
+  color: var(--app-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+.app-account-button {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-account-button:hover,
+.app-account-action:hover {
+  border-color: var(--app-brand);
+}
+/* Under the header, at its right edge; the popover itself is in the top layer */
+.app-account-menu {
+  position: fixed;
+  inset: auto;
+  top: calc(var(--app-header-height) - 4px);
+  right: 2rem;
+  width: min(18rem, calc(100vw - 32px));
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--app-divider);
+  border-radius: 12px;
+  background-color: var(--app-surface);
+  color: var(--app-text);
+  box-shadow: var(--app-shadow);
+}
+.app-account-menu:popover-open {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.app-account-note {
+  margin: 0 0 4px;
+  color: var(--app-text-muted);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.app-account-note strong {
+  color: var(--app-text);
+}
+.app-account-action {
+  height: 36px;
+  border-radius: 8px;
+}
+/* Asking before deleting the account (#147) */
+.app-dialog {
+  width: min(26rem, calc(100vw - 32px));
+  padding: 24px;
+  border: 1px solid var(--app-divider);
+  border-radius: 12px;
+  background-color: var(--app-surface);
+  color: var(--app-text);
+  box-shadow: var(--app-shadow);
+}
+.app-dialog::backdrop {
+  background-color: var(--app-backdrop);
+}
+.app-dialog h2 {
+  margin: 0 0 12px;
+  font-size: 1.125rem;
+}
+.app-dialog p {
+  margin: 0 0 20px;
+  color: var(--app-text-muted);
+  font-size: 14px;
+}
+.app-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+@media (max-width: 480px) {
+  .app-account {
+    margin-left: 12px;
+  }
+  .app-account-button {
+    max-width: 6rem;
+    padding: 0 10px;
+  }
+  .app-account-menu {
+    right: 16px;
+  }
 }
 /* Zoomable canvas: everything under the title bar, panned by dragging or keys */
 .app-viewport {

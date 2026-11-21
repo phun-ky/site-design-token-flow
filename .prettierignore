@@ -8,3 +8,6 @@ playwright-report
 
 # Vendored schemas, kept byte for byte as published
 scripts/schemas
+
+# Written by `supabase link`
+supabase/.temp

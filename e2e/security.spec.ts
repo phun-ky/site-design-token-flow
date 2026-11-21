@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { SUPABASE_URL } from '../src/app/supabase';
 import { getInlineScripts, scriptHash } from '../src/build/security-meta';
 
 import { PAGES } from './site';
@@ -16,6 +17,7 @@ const POLICY = (hashes: string[]) =>
     `style-src-attr ${keyword('unsafe-inline')}`,
     `img-src ${keyword('self')}`,
     `font-src ${keyword('self')}`,
+    `connect-src ${SUPABASE_URL}`,
     `base-uri ${keyword('none')}`,
     `form-action ${keyword('none')}`
   ].join('; ');

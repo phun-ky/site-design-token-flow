@@ -71,6 +71,16 @@ const defaultSet = (source: ExportSource) => {
 };
 
 /**
+ * The tokens as Tokens Studio JSON, new tokens in the default set: what a
+ * published link serves (#145).
+ *
+ * @param {ExportSource} source The tokens
+ * @returns {string} The JSON
+ */
+export const tokensStudioText = (source: ExportSource): string =>
+  exportText(source, 'tokens-studio', defaultSet(source));
+
+/**
  * Opens the `#export` dialog for the tokens.
  *
  * @param {ExportSource} source The tokens to export

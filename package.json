@@ -25,6 +25,8 @@
     "check:bestpractices": "node scripts/check-bestpractices.mjs",
     "bestpractices:url": "node scripts/bestpractices-url.mjs",
     "check:colours": "node --import tsx scripts/check-colours.mjs",
+    "check:supabase": "node scripts/check-supabase-storage.mjs",
+    "test:db": "supabase test db",
     "images:logo": "node scripts/render-logo.mjs"
   },
   "repository": {
@@ -75,6 +77,8 @@
   },
   "dependencies": {
     "@phun-ky/arclace": "^1.0.0",
+    "@phun-ky/typeof": "^3.0.10",
+    "@supabase/auth-js": "^2.119.0",
     "shiki": "^4.5.0"
   },
   "overrides": {

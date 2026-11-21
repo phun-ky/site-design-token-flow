@@ -55,6 +55,7 @@
     "ajv-formats": "^3.0.1",
     "eslint": "^10.13.0",
     "eslint-config-phun-ky": "^2.0.10",
+    "fast-check": "^4.10.3",
     "git-cz": "^4.9.0",
     "global-jsdom": "^30.0.0",
     "globals": "^17.13.0",

@@ -13,7 +13,8 @@
   /* Wide enough for every token name on one line; long values wrap */
   --dtf-token-max-width: 28rem;
   --dtf-token-spacing-inset-horizontal: 0.5rem;
-  --dtf-token-spacing-inset-vertical: 0;
+  /* Only shows once a value wraps, below that min-height holds the pill */
+  --dtf-token-spacing-inset-vertical: 4px;
   --dtf-token-border-radius: 1rem;
   --dtf-token-spacing-gap: 4px;
   --dtf-token-font-weight: 600;

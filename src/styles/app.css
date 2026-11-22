@@ -4,6 +4,7 @@
   --app-header-height: 64px;
   --app-bg: #1b1b1f;
   --app-dot: #2e2e35;
+  --app-canvas-bg: var(--app-bg);
   --app-surface: #202127;
   --app-text: rgba(255, 255, 245, 0.86);
   --app-text-muted: rgba(235, 235, 245, 0.6);
@@ -22,6 +23,7 @@
 :root.theme--light {
   --app-bg: #fff;
   --app-dot: #cad4db;
+  --app-canvas-bg: #f7f8ff;
   --app-surface: #fff;
   --app-text: #3c3c43;
   --app-text-muted: rgba(60, 60, 67, 0.78);
@@ -561,8 +563,12 @@ body {
   }
 }
 /* Zoomable canvas: everything under the title bar, panned by dragging or keys */
+/* Repeats the body's dot grid on top of the canvas color */
 .app-viewport {
   position: relative;
+  background-color: var(--app-canvas-bg);
+  background-image: radial-gradient(var(--app-dot) 1px, transparent 0);
+  background-size: 20px 20px;
   flex: 1;
   min-height: 0;
   overflow: hidden;

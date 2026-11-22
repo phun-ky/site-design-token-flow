@@ -1,6 +1,38 @@
 /* Site chrome: page, global header, theme switch and the zoomable canvas. */
 /* Dark is the default, `:root.theme--light` is the light theme (set by src/app/theme.ts). */
+/* Inter and DejaVu Sans Mono are served with the site (licenses in
+   site/public/fonts); SF Pro Text only shows where it is installed, its
+   license doesn't allow serving it */
+@font-face {
+  font-family: Inter;
+  src: url('/fonts/InterVariable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+/* shortcut: TTF as released, about 330 KB each; convert to WOFF2 to halve it */
+@font-face {
+  font-family: 'DejaVu Sans Mono';
+  src:
+    local('DejaVu Sans Mono'),
+    url('/fonts/DejaVuSansMono.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DejaVu Sans Mono';
+  src:
+    local('DejaVu Sans Mono Bold'),
+    url('/fonts/DejaVuSansMono-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 :root {
+  /* The site's fonts; the pill stylesheet's own defaults stay for other users */
+  --dtf-font-family: 'SF Pro Text', Inter, sans-serif;
+  --dtf-font-family-code: 'DejaVu Sans Mono', monospace;
   --app-header-height: 64px;
   --app-bg: #1b1b1f;
   --app-dot: #2e2e35;

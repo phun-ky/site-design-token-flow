@@ -407,11 +407,12 @@ const showSaved = () => {
         ? 'Saved in this browser'
         : 'Not saved: your browser blocks storage';
 };
-// "Show in the flow", once you have tokens of your own without problems
+// "Show in the flow", when the flow shows what is chosen here: a preset, or
+// your document without problems
 const showFlowLink = () => {
-  const flow = chooseFlowTokens(store, false);
+  const flow = chooseFlowTokens(store);
 
-  flowLinkEl.hidden = flow.kind !== 'yours';
+  flowLinkEl.hidden = flow.kind === 'example';
   flowHintEl.hidden = flow.kind !== 'yours' || flow.latest;
 };
 /** Shows checked tokens: the pills, the problems and what is saved */

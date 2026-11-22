@@ -2,10 +2,18 @@
 
 import { Arclace, type ArcConnectionDefinitionType } from '@phun-ky/arclace';
 
+import showcaseTokens from '../site/showcase.tokens.json';
+
 import { describeFlowSource } from './app/flow-source';
 import { loadFonts } from './app/fonts';
 import { mountHeader } from './app/header';
-import { browserStorage, chooseFlowTokens } from './app/saved-tokens';
+import {
+  browserStorage,
+  chooseFlowTokens,
+  listFlowDocuments,
+  switchDocument,
+  writeSaved
+} from './app/saved-tokens';
 import { mountSidebarCollapse } from './app/sidebar';
 import { createZoom, mountZoomControls } from './app/zoom';
 import exampleTokens from './assets/data/design-tokens.tokens.json';
@@ -295,34 +303,47 @@ DTF.prototype._init = function (this: DTFInstance) {
 
 mountHeader();
 
-// Your tokens from the playground, saved in this browser, or the example
-const flowTokens = chooseFlowTokens(
-  browserStorage(),
-  new URLSearchParams(window.location.search).get('tokens') === 'example'
-);
+// What the playground has chosen: a preset or one of your documents
+const storage = browserStorage();
+const flowTokens = chooseFlowTokens(storage);
+const showcase = flattenTokens(showcaseTokens as DTCGDocument);
 const example = flattenTokens(exampleTokens as DTCGDocument);
-const tokens = flowTokens.kind === 'yours' ? flowTokens.tokens : example;
+const tokens =
+  flowTokens.kind === 'yours'
+    ? flowTokens.tokens
+    : flowTokens.kind === 'preset' && flowTokens.preset === 'showcase'
+      ? showcase
+      : example;
 const lines = tokens.reduce((sum, token) => sum + token.ancestors.length, 0);
 const plural = (count: number, word: string) =>
   `${count} ${word}${count === 1 ? '' : 's'}`;
 /** The sidebar: which tokens are shown, why, and where to change them */
 const showSource = () => {
-  const { options, note, links } = describeFlowSource(
-    flowTokens,
-    example.length
-  );
+  const { options, note, links } = describeFlowSource(flowTokens, {
+    showcase: showcase.length,
+    example: example.length,
+    ...listFlowDocuments(storage)
+  });
   const showingEl = document.querySelector('#tokens-showing');
   const sourceEl = document.querySelector<HTMLElement>('#tokens-source');
 
   showingEl?.replaceChildren(
-    ...options.map(({ label, detail, href, current }) => {
+    ...options.map(({ label, detail, preset, document: id, current }) => {
       const item = document.createElement('li');
       // The tokens shown aren't a link to themselves
       const option = document.createElement(current ? 'span' : 'a');
       const small = document.createElement('small');
 
       if (current) option.setAttribute('aria-current', 'true');
-      else (option as HTMLAnchorElement).href = href;
+      else {
+        // Saves the choice, as the playground does, then the page reloads on it
+        (option as HTMLAnchorElement).href = './';
+        option.addEventListener('click', () => {
+          writeSaved(storage, { preset });
+
+          if (id) switchDocument(storage, id);
+        });
+      }
 
       small.textContent = detail;
       option.append(label, small);

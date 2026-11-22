@@ -406,14 +406,20 @@ const check = (
 };
 
 /**
- * What the flow view shows:
- * - `yours`: the tokens you edit in the playground, or when those have
- *   problems, the last version without (`latest` is false then)
- * - `example`: the bundled tokens, because you chose them (`chosen`), have
- *   no tokens of your own (`none`, an empty document included), your tokens
- *   have problems and no earlier version is saved (`problems`), or the browser
- *   blocks storage (`blocked`)
+ * What the flow view shows: what the playground has chosen, one choice for
+ * both views.
+ * - `preset`: the showcase or the example file
+ * - `yours`: the current document, or when its latest edits have problems,
+ *   its last version without (`latest` is false then)
+ * - `example`: the example file instead of the current document, because the
+ *   document has no tokens (`none`), has problems and no earlier version is
+ *   saved (`problems`), or the browser blocks storage (`blocked`)
  */
+export interface PresetTokens {
+  kind: 'preset';
+  preset: Exclude<Preset, 'custom'>;
+}
+
 export interface YourTokens {
   kind: 'yours';
   doc: DTCGDocument;
@@ -425,31 +431,32 @@ export interface YourTokens {
 
 export interface ExampleTokens {
   kind: 'example';
-  reason: 'chosen' | 'none' | 'problems' | 'blocked';
-  /** When you chose the example: how many tokens you have */
-  yours?: number;
-  /** When you chose the example: your document's name */
+  reason: 'none' | 'problems' | 'blocked';
+  /** The current document's name, when there is one */
   name?: string;
 }
 
-export type FlowTokens = YourTokens | ExampleTokens;
+export type FlowTokens = PresetTokens | YourTokens | ExampleTokens;
 
 /**
- * Chooses the tokens the flow view shows.
+ * Chooses the tokens the flow view shows: what the playground has chosen,
+ * the showcase when nothing is chosen yet, as in the playground.
  *
- * @param {TokenStorage | null} storage Where the playground saves your tokens
- * @param {boolean} example Whether you asked for the example tokens
- * @returns {FlowTokens} Your tokens, or why the example is shown
+ * @param {TokenStorage | null} storage Where the playground saves its choice
+ * @returns {FlowTokens} The tokens, or why the example is shown instead
  * @example
- * chooseFlowTokens(browserStorage(), location.search.includes('tokens=example'));
+ * chooseFlowTokens(browserStorage());
  */
-export const chooseFlowTokens = (
-  storage: TokenStorage | null,
-  example: boolean
-): FlowTokens => {
+export const chooseFlowTokens = (storage: TokenStorage | null): FlowTokens => {
   if (!storage) return { kind: 'example', reason: 'blocked' };
 
-  const { custom, valid } = readSaved(storage);
+  const { preset = 'showcase', custom, valid } = readSaved(storage);
+
+  if (preset !== 'custom') return { kind: 'preset', preset };
+
+  const { documents, current } = listDocuments(storage);
+  const name =
+    documents.find(({ id }) => id === current)?.name ?? FIRST_DOCUMENT.name;
   const latest = check(custom);
   const earlier = check(valid);
   // Your latest edits, or the last version of them without problems
@@ -460,18 +467,7 @@ export const chooseFlowTokens = (
   if (!found)
     return {
       kind: 'example',
-      reason: latest.status === 'problems' ? 'problems' : 'none'
-    };
-
-  const { documents, current } = listDocuments(storage);
-  const name =
-    documents.find(({ id }) => id === current)?.name ?? FIRST_DOCUMENT.name;
-
-  if (example)
-    return {
-      kind: 'example',
-      reason: 'chosen',
-      yours: found.tokens.length,
+      reason: latest.status === 'problems' ? 'problems' : 'none',
       name
     };
 
@@ -481,5 +477,45 @@ export const chooseFlowTokens = (
     tokens: found.tokens,
     latest: found === latest,
     name
+  };
+};
+
+/** A document as the flow lists it */
+export interface FlowDocument {
+  id: string;
+  name: string;
+  /** How many tokens the flow would show for it */
+  tokens: number;
+  /** Whether it has problems and no earlier version without */
+  problems: boolean;
+}
+
+/**
+ * Your documents, for the flow's list of what it can show.
+ *
+ * @param {TokenStorage | null} storage Where they are saved
+ * @returns {{ documents: FlowDocument[]; current: string }} The documents
+ * and the current one
+ */
+export const listFlowDocuments = (
+  storage: TokenStorage | null
+): { documents: FlowDocument[]; current: string } => {
+  const { documents, current } = listDocuments(storage);
+
+  return {
+    current,
+    documents: documents.map(({ id, name, custom, valid }) => {
+      const latest = check(custom);
+      const found = [latest, check(valid)].find(
+        (checked): checked is Usable => checked.status === 'ok'
+      );
+
+      return {
+        id,
+        name,
+        tokens: found?.tokens.length ?? 0,
+        problems: !found && latest.status === 'problems'
+      };
+    })
   };
 };

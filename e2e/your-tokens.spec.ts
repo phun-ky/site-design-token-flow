@@ -34,14 +34,18 @@ test.beforeEach(async ({ page }) => {
   await page.evaluate(() => localStorage.removeItem('dtf-demo'));
 });
 
-test('shows the example, with a link to try your own', async ({ page }) => {
+test('shows the showcase by default, as the playground does', async ({
+  page
+}) => {
   await page.reload();
-  await expect(page.locator(showing)).toHaveText(['The example201 tokens']);
-  await expect(page.locator(source)).toHaveText(
-    'You have no tokens of your own yet.Try your own in the playground'
-  );
-  await expect(page.locator(pills)).toHaveCount(201);
-  await expect(page.locator('#to-flow')).toHaveCount(0);
+  await expect(page.locator(showing)).toHaveText([
+    'Showcase42 tokens',
+    'Example file201 tokens',
+    'Your tokensEmpty'
+  ]);
+  await expect(page.locator(current)).toHaveText('Showcase42 tokens');
+  await expect(page.locator(source)).toHaveText('Edit it in the playground');
+  await expect(page.locator(pills)).toHaveCount(42);
 });
 
 test('draws your tokens from the playground, with their lines, after a reload', async ({
@@ -51,10 +55,8 @@ test('draws your tokens from the playground, with their lines, after a reload', 
   await page.getByRole('link', { name: 'Show in the flow' }).click();
 
   await expect(page).toHaveURL(/\/site-design-token-flow\/$/);
-  await expect(page.locator(current)).toHaveText(
-    'Your tokens2 tokens, saved in this browser'
-  );
-  await expect(page.locator(showing)).toHaveCount(2);
+  await expect(page.locator(current)).toHaveText('Your tokens2 tokens');
+  await expect(page.locator(showing)).toHaveCount(3);
   await expect(page.locator(pills)).toHaveCount(2);
   await expect(page.locator('.container .dtf-line')).toHaveCount(1);
 
@@ -67,14 +69,15 @@ test('keeps showing the last version without problems while you fix one', async 
   page
 }) => {
   await edit(page, VALID);
-  await expect(page.locator('#to-flow')).toBeVisible();
+  // Checked and kept as the last version without problems
+  await expect(page.locator('#groups .design-token')).toHaveCount(2);
   await page.locator('#source').fill(JSON.stringify(BROKEN, null, 2));
   await expect(page.locator('#error li')).toHaveCount(1);
   await expect(page.locator('#to-flow-hint')).toBeVisible();
 
   await page.goto('');
   await expect(page.locator(source)).toContainText(
-    'Showing the last version of your tokens without problems: your latest edits in the playground have problems.'
+    'Showing the last version of “Your tokens” without problems: your latest edits in the playground have problems.'
   );
   await expect(page.locator(current)).toContainText('Your tokens');
   await expect(page.locator(pills)).toHaveCount(2);
@@ -86,7 +89,7 @@ test('keeps showing the last version without problems while you fix one', async 
   );
 });
 
-test('shows the example when your tokens have problems and none were valid', async ({
+test('shows the example file when your tokens have problems and none were valid', async ({
   page
 }) => {
   await edit(page, BROKEN);
@@ -95,33 +98,44 @@ test('shows the example when your tokens have problems and none were valid', asy
 
   await page.goto('');
   await expect(page.locator(source)).toHaveText(
-    'Your tokens in the playground have problems, so the flow shows the example.Fix them in the playground'
+    '“Your tokens” has problems, so the flow shows the example file.Fix them in the playground'
   );
-  await expect(page.locator(showing)).toHaveText(['The example201 tokens']);
+  await expect(page.locator(current)).toHaveText('Your tokensHas problems');
   await expect(page.locator(pills)).toHaveCount(201);
 });
 
-test('switches between your tokens and the example, and back', async ({
+test('shares one choice with the playground, chosen in either', async ({
   page
 }) => {
   await edit(page, VALID);
   await expect(page.locator('#to-flow')).toBeVisible();
   await page.goto('');
 
-  await page.getByRole('link', { name: /^The example/ }).click();
-  await expect(page).toHaveURL(/\?tokens=example$/);
-  await expect(page.locator(current)).toHaveText('The example201 tokens');
+  // Chosen in the flow, the playground follows
+  await page.getByRole('link', { name: /^Example file/ }).click();
+  await expect(page.locator(current)).toHaveText('Example file201 tokens');
   await expect(page.locator(pills)).toHaveCount(201);
+  await page.goto('playground');
+  await expect(
+    page.getByRole('radio', { name: /^Example file/ })
+  ).toBeChecked();
+  await expect(page.locator('#to-flow')).toBeVisible();
+
+  // Chosen in the playground, the flow follows
+  await page.getByRole('radio', { name: /^Showcase/ }).check();
+  await page.getByRole('link', { name: 'Show in the flow' }).click();
+  await expect(page.locator(current)).toHaveText('Showcase42 tokens');
+  await expect(page.locator(pills)).toHaveCount(42);
 
   await page.getByRole('link', { name: /^Your tokens/ }).click();
   await expect(page.locator(current)).toContainText('Your tokens');
   await expect(page.locator(pills)).toHaveCount(2);
 
   // Your tokens are only in this browser: clearing its storage brings the
-  // example back
+  // showcase back
   await page.evaluate(() => localStorage.clear());
   await page.reload();
-  await expect(page.locator(pills)).toHaveCount(201);
+  await expect(page.locator(pills)).toHaveCount(42);
 });
 
 test('folds the sidebar into a bar on a phone', async ({ page }) => {

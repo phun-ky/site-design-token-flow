@@ -9,6 +9,7 @@ import {
   chooseFlowTokens,
   deleteDocument,
   listDocuments,
+  listFlowDocuments,
   readSaved,
   renameDocument,
   restoreDocument,
@@ -134,11 +135,21 @@ describe('writeSaved', () => {
 });
 
 describe('chooseFlowTokens', () => {
-  it('shows your latest edits when they have no problems', () => {
-    const flow = chooseFlowTokens(
-      memory({ custom: VALID, valid: OTHER }),
-      false
+  const yours = (state: object) => memory({ preset: 'custom', ...state });
+
+  it('shows the preset the playground has chosen, the showcase by default', () => {
+    assert.deepEqual(chooseFlowTokens(memory()), {
+      kind: 'preset',
+      preset: 'showcase'
+    });
+    assert.deepEqual(
+      chooseFlowTokens(memory({ preset: 'bundled', custom: VALID })),
+      { kind: 'preset', preset: 'bundled' }
     );
+  });
+
+  it('shows your latest edits when they have no problems', () => {
+    const flow = chooseFlowTokens(yours({ custom: VALID, valid: OTHER }));
 
     assert.equal(flow.kind, 'yours');
     assert.ok(flow.kind === 'yours' && flow.latest);
@@ -149,58 +160,78 @@ describe('chooseFlowTokens', () => {
   });
 
   it('shows the last version without problems while your edits have some', () => {
-    const flow = chooseFlowTokens(
-      memory({ custom: BROKEN, valid: VALID }),
-      false
-    );
+    const flow = chooseFlowTokens(yours({ custom: BROKEN, valid: VALID }));
 
     assert.ok(flow.kind === 'yours' && !flow.latest);
     assert.equal(flow.kind === 'yours' && flow.tokens.length, 2);
   });
 
-  it('shows the example, and says why', () => {
-    assert.deepEqual(chooseFlowTokens(null, false), {
+  it('shows the example instead, and says why', () => {
+    const name = 'Your tokens';
+
+    assert.deepEqual(chooseFlowTokens(null), {
       kind: 'example',
       reason: 'blocked'
     });
-    assert.deepEqual(chooseFlowTokens(memory(), false), {
+    assert.deepEqual(chooseFlowTokens(yours({})), {
       kind: 'example',
-      reason: 'none'
+      reason: 'none',
+      name
     });
-    assert.deepEqual(chooseFlowTokens(memory({ custom: '{}' }), false), {
+    assert.deepEqual(chooseFlowTokens(yours({ custom: '{}' })), {
       kind: 'example',
-      reason: 'none'
+      reason: 'none',
+      name
     });
-    assert.deepEqual(chooseFlowTokens(memory({ custom: BROKEN }), false), {
+    assert.deepEqual(chooseFlowTokens(yours({ custom: BROKEN })), {
       kind: 'example',
-      reason: 'problems'
+      reason: 'problems',
+      name
     });
-    assert.deepEqual(chooseFlowTokens(memory({ custom: '{ "a": ' }), false), {
+    assert.deepEqual(chooseFlowTokens(yours({ custom: '{ "a": ' })), {
       kind: 'example',
-      reason: 'problems'
-    });
-    assert.deepEqual(chooseFlowTokens(memory({ custom: VALID }), true), {
-      kind: 'example',
-      reason: 'chosen',
-      yours: 2,
-      name: 'Your tokens'
+      reason: 'problems',
+      name
     });
   });
 
   it('shows the current document, with its name', () => {
-    const storage = memory({
-      current: 'b',
-      documents: [
-        { id: 'a', name: 'A', custom: OTHER },
-        { id: 'b', name: 'Brand', custom: VALID }
-      ]
-    });
-    const flow = chooseFlowTokens(storage, false);
+    const flow = chooseFlowTokens(
+      memory({
+        preset: 'custom',
+        current: 'b',
+        documents: [
+          { id: 'a', name: 'A', custom: OTHER },
+          { id: 'b', name: 'Brand', custom: VALID }
+        ]
+      })
+    );
 
     assert.ok(flow.kind === 'yours');
     assert.equal(flow.name, 'Brand');
     assert.equal(flow.tokens.length, 2);
-    assert.equal(describeFlowSource(flow, 201).options[0].label, 'Brand');
+  });
+});
+
+describe('listFlowDocuments', () => {
+  it('counts what the flow would show for each document', () => {
+    const storage = memory({
+      current: 'b',
+      documents: [
+        { id: 'a', name: 'A' },
+        { id: 'b', name: 'B', custom: BROKEN, valid: OTHER },
+        { id: 'c', name: 'C', custom: BROKEN }
+      ]
+    });
+
+    assert.deepEqual(listFlowDocuments(storage), {
+      current: 'b',
+      documents: [
+        { id: 'a', name: 'A', tokens: 0, problems: false },
+        { id: 'b', name: 'B', tokens: 1, problems: false },
+        { id: 'c', name: 'C', tokens: 0, problems: true }
+      ]
+    });
   });
 });
 
@@ -392,95 +423,141 @@ describe('documents', () => {
 });
 
 describe('describeFlowSource', () => {
-  const yours = chooseFlowTokens(memory({ custom: VALID }), false);
-  const earlier = chooseFlowTokens(
-    memory({ custom: BROKEN, valid: VALID }),
-    false
-  );
-  const example = (current: boolean) => ({
-    label: 'The example',
-    detail: '201 tokens',
-    href: './?tokens=example',
-    current
-  });
+  const choices = {
+    showcase: 42,
+    example: 201,
+    current: 'b',
+    documents: [
+      { id: 'a', name: 'A', tokens: 0, problems: false },
+      { id: 'b', name: 'Brand', tokens: 2, problems: false },
+      { id: 'c', name: 'C', tokens: 0, problems: true },
+      { id: 'd', name: 'D', tokens: 1, problems: false }
+    ]
+  };
+  const shown = (flow: Parameters<typeof describeFlowSource>[0]) =>
+    describeFlowSource(flow, choices).options.filter(({ current }) => current);
+  const playground = (label: string) => [{ label, href: './playground' }];
 
-  it('offers your tokens and the example, with the shown one current', () => {
-    assert.deepEqual(describeFlowSource(yours, 201), {
-      options: [
-        {
-          label: 'Your tokens',
-          detail: '2 tokens, saved in this browser',
-          href: './',
-          current: true
-        },
-        example(false)
-      ],
-      note: null,
-      links: [{ label: 'Edit them in the playground', href: './playground' }]
-    });
+  it('offers the presets and your documents, as the playground does', () => {
     assert.deepEqual(
-      describeFlowSource({ kind: 'example', reason: 'chosen', yours: 2 }, 201)
-        .options,
-      [
-        {
-          label: 'Your tokens',
-          detail: '2 tokens, saved in this browser',
-          href: './',
-          current: false
-        },
-        example(true)
-      ]
+      describeFlowSource({ kind: 'preset', preset: 'showcase' }, choices),
+      {
+        options: [
+          {
+            label: 'Showcase',
+            detail: '42 tokens',
+            preset: 'showcase',
+            current: true
+          },
+          {
+            label: 'Example file',
+            detail: '201 tokens',
+            preset: 'bundled',
+            current: false
+          },
+          {
+            label: 'A',
+            detail: 'Empty',
+            preset: 'custom',
+            document: 'a',
+            current: false
+          },
+          {
+            label: 'Brand',
+            detail: '2 tokens',
+            preset: 'custom',
+            document: 'b',
+            current: false
+          },
+          {
+            label: 'C',
+            detail: 'Has problems',
+            preset: 'custom',
+            document: 'c',
+            current: false
+          },
+          {
+            label: 'D',
+            detail: '1 token',
+            preset: 'custom',
+            document: 'd',
+            current: false
+          }
+        ],
+        note: null,
+        links: playground('Edit it in the playground')
+      }
+    );
+    assert.deepEqual(
+      shown({ kind: 'preset', preset: 'bundled' }).map(({ label }) => label),
+      ['Example file']
     );
   });
 
-  it('says when the flow shows an earlier version of your tokens', () => {
-    const source = describeFlowSource(earlier, 201);
+  it('marks the current document as shown', () => {
+    const flow = chooseFlowTokens(memory({ preset: 'custom', custom: VALID }));
+    const source = describeFlowSource(flow, choices);
+
+    assert.deepEqual(
+      shown(flow).map(({ label }) => label),
+      ['Brand']
+    );
+    assert.equal(source.note, null);
+    assert.deepEqual(source.links, playground('Edit them in the playground'));
+  });
+
+  it('says when the flow shows an earlier version of your document', () => {
+    const source = describeFlowSource(
+      chooseFlowTokens(
+        memory({ preset: 'custom', custom: BROKEN, valid: VALID })
+      ),
+      choices
+    );
 
     assert.match(
       source.note ?? '',
-      /^Showing the last version of your tokens without problems/
+      /^Showing the last version of “Your tokens” without problems/
     );
-    assert.deepEqual(source.links, [
-      { label: 'Fix them in the playground', href: './playground' }
-    ]);
+    assert.deepEqual(source.links, playground('Fix them in the playground'));
   });
 
-  it('offers only the example, and says why, when you have no tokens to show', () => {
-    const none = describeFlowSource({ kind: 'example', reason: 'none' }, 201);
-    const problems = describeFlowSource(
-      { kind: 'example', reason: 'problems' },
-      201
+  it('says why it shows the example file instead of your document', () => {
+    const none = describeFlowSource(
+      { kind: 'example', reason: 'none', name: 'A' },
+      choices
     );
+    const problems = describeFlowSource(
+      { kind: 'example', reason: 'problems', name: 'C' },
+      choices
+    );
+
+    assert.equal(
+      none.note,
+      '“A” is empty, so the flow shows the example file.'
+    );
+    assert.deepEqual(none.links, playground('Add tokens in the playground'));
+    assert.equal(
+      problems.note,
+      '“C” has problems, so the flow shows the example file.'
+    );
+    assert.deepEqual(problems.links, playground('Fix them in the playground'));
+  });
+
+  it('offers only the example file when the browser blocks storage', () => {
     const blocked = describeFlowSource(
       { kind: 'example', reason: 'blocked' },
-      201
+      choices
     );
 
-    for (const source of [none, problems, blocked])
-      assert.deepEqual(source.options, [example(true)]);
-
-    assert.equal(none.note, 'You have no tokens of your own yet.');
-    assert.deepEqual(none.links, [
-      { label: 'Try your own in the playground', href: './playground' }
-    ]);
-    assert.deepEqual(problems.links, [
-      { label: 'Fix them in the playground', href: './playground' }
+    assert.deepEqual(blocked.options, [
+      {
+        label: 'Example file',
+        detail: '201 tokens',
+        preset: 'bundled',
+        current: true
+      }
     ]);
     assert.match(blocked.note ?? '', /blocks storage/);
     assert.deepEqual(blocked.links, []);
-  });
-
-  it('counts one token as one', () => {
-    const one = chooseFlowTokens(memory({ custom: OTHER }), false);
-
-    assert.equal(
-      describeFlowSource(one, 1).options[0].detail,
-      '1 token, saved in this browser'
-    );
-    assert.equal(
-      describeFlowSource({ kind: 'example', reason: 'chosen' }, 1).options[0]
-        .detail,
-      '0 tokens, saved in this browser'
-    );
   });
 });

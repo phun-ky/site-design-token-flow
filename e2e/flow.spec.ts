@@ -3,7 +3,12 @@ import { expect, test } from '@playwright/test';
 import { canvasTransform, zoomLevel } from './site';
 
 test.beforeEach(async ({ page }) => {
+  // The example file: a flow large enough to zoom and pan
   await page.goto('');
+  await page.evaluate(() =>
+    localStorage.setItem('dtf-demo', JSON.stringify({ preset: 'bundled' }))
+  );
+  await page.reload();
   await page.waitForLoadState('networkidle');
   await page.evaluate(() => document.fonts.ready);
 });

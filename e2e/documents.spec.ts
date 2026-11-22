@@ -154,6 +154,72 @@ test('undoes a delete, putting the document back where it was', async ({
   ).toBeChecked();
 });
 
+test('deletes a document from its actions, without opening it', async ({
+  page
+}) => {
+  await page.locator('#source').fill(JSON.stringify(BRAND));
+  await page.getByRole('button', { name: 'New document' }).click();
+  await page.locator('#source').fill(JSON.stringify(PRODUCT));
+  await expect(page.locator(pills)).toHaveCount(2);
+
+  await page
+    .getByRole('button', {
+      name: 'Actions for Your tokens',
+      exact: true
+    })
+    .click();
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: /^Delete/ })
+    .getByRole('button', { name: 'Delete' })
+    .click();
+
+  // The open one stays open
+  await expect(
+    page.getByRole('radio', { name: 'Your tokens', exact: true })
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole('radio', { name: /^Your tokens 2/ })
+  ).toBeChecked();
+  await expect(page.locator(pills)).toHaveCount(2);
+
+  // Undo puts it back, and the open one stays open
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(
+    page.getByRole('radio', { name: 'Your tokens', exact: true })
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole('radio', { name: /^Your tokens 2/ })
+  ).toBeChecked();
+});
+
+test('deletes the last document, even an empty one', async ({ page }) => {
+  await page.getByRole('radio', { name: /^Your tokens/ }).check();
+  await page.getByRole('button', { name: 'Delete document' }).click();
+
+  await expect(page.getByRole('radio', { name: /^Your tokens/ })).toHaveCount(
+    0
+  );
+  await expect(page.getByRole('radio', { name: /^Showcase/ })).toBeChecked();
+  await expect(page.locator('#undo')).toContainText('Deleted Your tokens.');
+
+  // Still gone after a reload, and in the flow
+  await page.reload();
+  await expect(page.getByRole('radio', { name: /^Your tokens/ })).toHaveCount(
+    0
+  );
+  await page.goto('');
+  await expect(page.locator('#tokens-showing li')).toHaveText([
+    'Showcase42 tokens',
+    'Example file201 tokens'
+  ]);
+
+  // Editing starts a document again
+  await page.goto('playground');
+  await page.locator('#source').fill(JSON.stringify(BRAND));
+  await expect(page.getByRole('radio', { name: /^Your tokens/ })).toBeChecked();
+});
+
 test('offers undo for 10 seconds', async ({ page }) => {
   await page.clock.install();
   await page.reload();

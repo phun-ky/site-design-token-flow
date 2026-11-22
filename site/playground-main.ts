@@ -74,6 +74,8 @@ const documentEl = $<HTMLDivElement>('#document');
 const documentNameEl = $<HTMLInputElement>('#document-name');
 const newDocumentEl = $<HTMLButtonElement>('#new-document');
 const deleteDocumentEl = $<HTMLButtonElement>('#delete-document');
+const documentMenuEl = $<HTMLElement>('#document-menu');
+const documentMenuDeleteEl = $<HTMLButtonElement>('#document-menu-delete');
 const deleteEl = $<HTMLDialogElement>('#delete');
 const undoEl = $<HTMLParagraphElement>('#undo');
 const undoTextEl = $<HTMLSpanElement>('#undo-text');
@@ -148,6 +150,35 @@ const documentDetail = (document: SavedDocument) => {
 
   return document.link ? 'Published' : '';
 };
+
+/** The document the actions menu is open for */
+let menuDocument = '';
+
+/** A document's line: its option, and a button for its actions */
+const row = (label: HTMLLabelElement, saved: SavedDocument) => {
+  const line = document.createElement('div');
+  const actions = document.createElement('button');
+
+  line.className = 'demo-document-row';
+  actions.type = 'button';
+  actions.className = 'demo-icon-button';
+  actions.setAttribute('popovertarget', 'document-menu');
+  actions.setAttribute('aria-label', `Actions for ${saved.name}`);
+  actions.title = 'Actions';
+  actions.innerHTML =
+    '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>';
+  // Runs before the popover opens: which document, and under this button
+  actions.addEventListener('click', () => {
+    const { bottom, left } = actions.getBoundingClientRect();
+
+    menuDocument = saved.id;
+    documentMenuEl.style.setProperty('--x', `${left}px`);
+    documentMenuEl.style.setProperty('--y', `${bottom + 4}px`);
+  });
+  line.append(label, actions);
+
+  return line;
+};
 /** An option for each of your documents, and the current one's name */
 const renderDocuments = () => {
   const { documents } = listDocuments(store);
@@ -172,7 +203,7 @@ const renderDocuments = () => {
       detail.textContent = documentDetail(saved);
       label.append(input, name, detail);
 
-      return label;
+      return row(label, saved);
     })
   );
   documentsHintEl.hidden = Boolean(store);
@@ -209,9 +240,15 @@ const saveAsYours = (text: string, name?: string) => {
     }
   }
 
+  // After deleting every document, this one is new and needs its line
+  const none = listDocuments(store).documents.length === 0;
+  const saved = writeSaved(store, { preset: 'custom', custom: text });
+
+  if (none) renderDocuments();
+
   setPreset('custom');
 
-  return writeSaved(store, { preset: 'custom', custom: text });
+  return saved;
 };
 
 // Syntax highlighting, once Shiki has loaded; plain text until then
@@ -681,7 +718,6 @@ documentNameEl.addEventListener('change', () => {
   link.edited();
 });
 
-/** Deletes the current document, and shows the one that is current then */
 /** How long a deleted document can be restored (#156) */
 const UNDO_TIME = 10_000;
 
@@ -689,6 +725,9 @@ let undo: {
   document: SavedDocument;
   index: number;
   unpublish: boolean;
+  /** Whether it was open in the editor, and which document was current */
+  shown: boolean;
+  current: string;
   timer: number;
 } | null = null;
 
@@ -705,25 +744,39 @@ const finishUndo = () => {
 
   if (unpublish && link.canUnpublish(document)) void link.unpublish(document);
 };
-/** Deletes the current document, and offers to undo it for a while */
-const removeDocument = (unpublish: boolean) => {
+/**
+ * Deletes a document, and offers to undo it for a while. When it was open,
+ * the editor shows the next one, or the showcase when none is left.
+ */
+const removeDocument = (id: string, unpublish: boolean) => {
   finishUndo();
 
   const { documents, current } = listDocuments(store);
-  const index = documents.findIndex(({ id }) => id === current);
+  const index = documents.findIndex((saved) => saved.id === id);
   const saved = documents[index];
 
-  deleteDocument(store, current);
+  if (!saved) return;
+
+  const shown = preset() === 'custom' && id === current;
+
+  deleteDocument(store, id);
   undo = {
     document: saved,
     index,
     unpublish,
+    shown,
+    current,
     timer: window.setTimeout(finishUndo, UNDO_TIME)
   };
   // Not listed as published elsewhere while it can come back
   link.hold(saved.link ?? null);
   renderDocuments();
-  loadPreset('custom');
+
+  if (shown)
+    loadPreset(
+      listDocuments(store).documents.length > 0 ? 'custom' : 'showcase'
+    );
+
   undoTextEl.textContent = `Deleted ${saved.name}.`;
   undoEl.hidden = false;
   announce(`Deleted ${saved.name}. You can undo it for 10 seconds.`);
@@ -735,15 +788,21 @@ const removeDocument = (unpublish: boolean) => {
 undoButtonEl.addEventListener('click', () => {
   if (!undo) return;
 
-  const { document, index, timer } = undo;
+  const { document, index, shown, current, timer } = undo;
 
   window.clearTimeout(timer);
   undo = null;
   undoEl.hidden = true;
   link.hold(null);
   restoreDocument(store, document, index);
+
+  // Restored as current; another document that was current stays so
+  if (current && current !== document.id) switchDocument(store, current);
+
   renderDocuments();
-  loadPreset('custom');
+
+  if (shown) loadPreset('custom');
+
   announce(`Restored ${document.name}`);
   presetEls()
     .find((input) => input.checked)
@@ -760,27 +819,45 @@ revertEl.addEventListener('click', () => {
   );
 });
 
-deleteDocumentEl.addEventListener('click', () => {
-  const { documents, current } = listDocuments(store);
-  const saved = documents.find(({ id }) => id === current);
+/** The document the delete dialog asks about */
+let deleting = '';
 
-  // Only ask when there are tokens or a link to lose
-  if ((saved?.custom ?? '{}').trim() === '{}' && !saved?.link) {
-    removeDocument(false);
+/** Deletes a document, asking first when there are tokens or a link to lose */
+const requestDelete = (id: string) => {
+  const saved = listDocuments(store).documents.find(
+    (document) => document.id === id
+  );
+
+  if (!saved) return;
+
+  if ((saved.custom ?? '{}').trim() === '{}' && !saved.link) {
+    removeDocument(id, false);
 
     return;
   }
 
+  deleting = id;
   // Unpublishing needs signing in; signed out, the link stays published
-  deleteUnpublishFieldEl.hidden = !saved || !link.canUnpublish(saved);
+  deleteUnpublishFieldEl.hidden = !link.canUnpublish(saved);
   deleteUnpublishEl.checked = true;
-  deleteNameEl.textContent = `"${saved?.name}"`;
+  deleteNameEl.textContent = `"${saved.name}"`;
   deleteEl.returnValue = '';
   deleteEl.showModal();
+};
+
+deleteDocumentEl.addEventListener('click', () =>
+  requestDelete(listDocuments(store).current)
+);
+documentMenuDeleteEl.addEventListener('click', () => {
+  documentMenuEl.hidePopover();
+  requestDelete(menuDocument);
 });
 deleteEl.addEventListener('close', () => {
   if (deleteEl.returnValue === 'delete')
-    removeDocument(!deleteUnpublishFieldEl.hidden && deleteUnpublishEl.checked);
+    removeDocument(
+      deleting,
+      !deleteUnpublishFieldEl.hidden && deleteUnpublishEl.checked
+    );
 });
 // The backdrop cancels, like Esc and Cancel
 deleteEl.addEventListener('click', (event) => {

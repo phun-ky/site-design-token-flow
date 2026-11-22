@@ -413,12 +413,45 @@ describe('documents', () => {
 
     assert.equal(deleteDocument(storage, added?.id as string), true);
     assert.equal(listDocuments(storage).current, 'yours');
+  });
+
+  it('keeps the current document when deleting another', () => {
+    const storage = memory({ custom: VALID });
+    const added = addDocument(storage);
+
+    switchDocument(storage, 'yours');
+    deleteDocument(storage, added?.id as string);
+    assert.equal(listDocuments(storage).current, 'yours');
+  });
+
+  it('leaves none after deleting the last, until you add one', () => {
+    const storage = memory({ preset: 'custom', custom: VALID });
+
     deleteDocument(storage, 'yours');
-    assert.deepEqual(listDocuments(storage), {
-      documents: [{ id: 'yours', name: 'Your tokens' }],
-      current: 'yours'
+    assert.deepEqual(listDocuments(storage), { documents: [], current: '' });
+    assert.deepEqual(readSaved(storage), { preset: 'custom' });
+    assert.deepEqual(chooseFlowTokens(storage), {
+      kind: 'preset',
+      preset: 'showcase'
     });
-    assert.deepEqual(readSaved(storage), {});
+
+    // Saving the preset keeps the list empty
+    writeSaved(storage, { preset: 'showcase' });
+    assert.deepEqual(listDocuments(storage).documents, []);
+
+    // Typing tokens starts the first document again
+    writeSaved(storage, { custom: OTHER });
+    assert.deepEqual(
+      listDocuments(storage).documents.map(({ id }) => id),
+      ['yours']
+    );
+  });
+
+  it('deletes the first document before any is saved', () => {
+    const storage = memory({ preset: 'showcase' });
+
+    deleteDocument(storage, 'yours');
+    assert.deepEqual(listDocuments(storage).documents, []);
   });
 });
 

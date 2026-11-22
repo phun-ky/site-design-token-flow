@@ -13,7 +13,8 @@
   /* Wide enough for every token name on one line; long values wrap */
   --dtf-token-max-width: 28rem;
   --dtf-token-spacing-inset-horizontal: 0.5rem;
-  --dtf-token-spacing-inset-vertical: 0;
+  /* Only shows once a value wraps, below that min-height holds the pill */
+  --dtf-token-spacing-inset-vertical: 4px;
   --dtf-token-border-radius: 1rem;
   --dtf-token-spacing-gap: 4px;
   --dtf-token-font-weight: 600;
@@ -265,4 +266,21 @@
   line-height: var(--dtf-token-code-line-height);
   font-weight: var(--dtf-token-code-font-weigth);
   font-family: var(--dtf-font-family-code);
+}
+.design-token[data-deprecated]::after {
+  /* A tag on the corner, so the name and value stay readable; the pill's
+     own colors swapped, for contrast in both themes */
+  content: 'deprecated';
+  position: absolute;
+  top: 0;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  padding: 1px 4px;
+  border-radius: 4px;
+  color: var(--dtf-color-background);
+  background-color: var(--dtf-color-text-accent);
+  font-family: var(--dtf-font-family);
+  font-size: 9px;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
 }

@@ -1,21 +1,31 @@
-import type { FlowTokens } from './saved-tokens';
+import type { FlowDocument, FlowTokens, Preset } from './saved-tokens';
 
-/** Links on the flow view, relative to it */
+/** The playground, relative to the flow view */
 const PLAYGROUND = './playground';
-const EXAMPLE = './?tokens=example';
-const YOURS = './';
 
 export interface FlowOption {
   label: string;
-  /** How many tokens, and where they are kept */
+  /** How many tokens */
   detail: string;
-  href: string;
+  /** What choosing it saves: the same choice as in the playground */
+  preset: Preset;
+  /** For one of your documents: which */
+  document?: string;
   /** The tokens the flow shows now */
   current: boolean;
 }
 
+export interface FlowChoices {
+  /** How many tokens the showcase and the example file have */
+  showcase: number;
+  example: number;
+  /** Your documents, and the current one */
+  documents: FlowDocument[];
+  current: string;
+}
+
 export interface FlowSource {
-  /** The tokens the flow can show: yours, when you have some, and the example */
+  /** What the flow can show: the playground's choices */
   options: FlowOption[];
   /** Why the flow shows what it does, when that needs saying */
   note: string | null;
@@ -26,70 +36,83 @@ const count = (n: number) => (n === 1 ? '1 token' : `${n} tokens`);
 
 /**
  * What the flow view's sidebar says about the tokens it shows (#111): the
- * tokens it can show, why when that isn't obvious, and where to change them.
+ * same choices as the playground's, the chosen one current, why the flow
+ * shows the example instead when it does, and where to change them.
  *
  * @param {FlowTokens} flow The tokens the flow view shows
- * @param {number} example How many tokens the example has
+ * @param {FlowChoices} choices The presets' sizes and your documents
  * @returns {FlowSource} The options, note and links
  * @example
- * describeFlowSource({ kind: 'example', reason: 'none' }, 201).note;
- * // => 'You have no tokens of your own yet.'
+ * describeFlowSource({ kind: 'preset', preset: 'showcase' }, choices).note;
+ * // => null
  */
 export const describeFlowSource = (
   flow: FlowTokens,
-  example: number
+  { showcase, example, documents, current }: FlowChoices
 ): FlowSource => {
-  const exampleOption = (current: boolean): FlowOption => ({
-    label: 'The example',
+  const preset = flow.kind === 'preset' ? flow.preset : 'custom';
+  const exampleFile = (chosen: boolean): FlowOption => ({
+    label: 'Example file',
     detail: count(example),
-    href: EXAMPLE,
-    current
-  });
-  const yoursOption = (n: number, current: boolean): FlowOption => ({
-    label: ('name' in flow && flow.name) || 'Your tokens',
-    detail: `${count(n)}, saved in this browser`,
-    href: YOURS,
-    current
+    preset: 'bundled',
+    current: chosen
   });
 
-  if (flow.kind === 'yours') {
+  // Nothing can be chosen without storage: the example is all there is
+  if (flow.kind === 'example' && flow.reason === 'blocked')
     return {
-      options: [yoursOption(flow.tokens.length, true), exampleOption(false)],
-      note: flow.latest
-        ? null
-        : 'Showing the last version of your tokens without problems: your latest edits in the playground have problems.',
-      links: [
-        flow.latest
-          ? { label: 'Edit them in the playground', href: PLAYGROUND }
-          : { label: 'Fix them in the playground', href: PLAYGROUND }
-      ]
+      options: [exampleFile(true)],
+      note: 'Your browser blocks storage for this site, so the flow cannot show tokens from the playground.',
+      links: []
     };
-  }
 
-  switch (flow.reason) {
-    case 'chosen':
+  const options: FlowOption[] = [
+    {
+      label: 'Showcase',
+      detail: count(showcase),
+      preset: 'showcase',
+      current: preset === 'showcase'
+    },
+    exampleFile(preset === 'bundled'),
+    ...documents.map(({ id, name, tokens, problems }) => ({
+      label: name,
+      detail: tokens > 0 ? count(tokens) : problems ? 'Has problems' : 'Empty',
+      preset: 'custom' as const,
+      document: id,
+      current: preset === 'custom' && id === current
+    }))
+  ];
+
+  switch (flow.kind) {
+    case 'preset':
       return {
-        options: [yoursOption(flow.yours ?? 0, false), exampleOption(true)],
+        options,
         note: null,
-        links: [{ label: 'Edit yours in the playground', href: PLAYGROUND }]
+        links: [{ label: 'Edit it in the playground', href: PLAYGROUND }]
       };
-    case 'problems':
+    case 'yours':
       return {
-        options: [exampleOption(true)],
-        note: 'Your tokens in the playground have problems, so the flow shows the example.',
-        links: [{ label: 'Fix them in the playground', href: PLAYGROUND }]
-      };
-    case 'blocked':
-      return {
-        options: [exampleOption(true)],
-        note: 'Your browser blocks storage for this site, so the flow cannot show tokens from the playground.',
-        links: []
+        options,
+        note: flow.latest
+          ? null
+          : `Showing the last version of “${flow.name}” without problems: your latest edits in the playground have problems.`,
+        links: [
+          flow.latest
+            ? { label: 'Edit them in the playground', href: PLAYGROUND }
+            : { label: 'Fix them in the playground', href: PLAYGROUND }
+        ]
       };
     default:
-      return {
-        options: [exampleOption(true)],
-        note: 'You have no tokens of your own yet.',
-        links: [{ label: 'Try your own in the playground', href: PLAYGROUND }]
-      };
+      return flow.reason === 'problems'
+        ? {
+            options,
+            note: `“${flow.name}” has problems, so the flow shows the example file.`,
+            links: [{ label: 'Fix them in the playground', href: PLAYGROUND }]
+          }
+        : {
+            options,
+            note: `“${flow.name}” is empty, so the flow shows the example file.`,
+            links: [{ label: 'Add tokens in the playground', href: PLAYGROUND }]
+          };
   }
 };

@@ -1,8 +1,9 @@
 /* Site chrome: page, global header, theme switch and the zoomable canvas. */
 /* Dark is the default, `:root.theme--light` is the light theme (set by src/app/theme.ts). */
-/* Inter and DejaVu Sans Mono (converted from the 2.37 release TTFs) are
-   served with the site, licenses in site/public/fonts; SF Pro Text only
-   shows where it is installed, its license doesn't allow serving it */
+/* Inter 4.1 and DejaVu Sans Mono 2.37 are served with the site, cut down to
+   Latin with fontTools (other characters fall back to the next font), licenses
+   in site/public/fonts; SF Pro Text only shows where it is installed, its
+   license doesn't allow serving it */
 @font-face {
   font-family: Inter;
   src: url('/fonts/InterVariable.woff2') format('woff2');

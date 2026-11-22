@@ -17,17 +17,19 @@ const BUDGETS = [
     total: 1400 * KB,
     Script: 30 * KB,
     Stylesheet: 10 * KB,
-    Font: 1200 * KB,
+    // The example's fonts, and the site's own (Inter, DejaVu Sans Mono)
+    Font: 1300 * KB,
     requests: 22,
     lcp: 2500
   },
   {
     name: 'playground',
     path: 'playground',
-    total: 500 * KB,
+    total: 600 * KB,
     Script: 150 * KB,
     Stylesheet: 10 * KB,
-    Font: 350 * KB,
+    // The showcase's fonts, and the site's own (Inter, DejaVu Sans Mono)
+    Font: 450 * KB,
     requests: 15,
     lcp: 4000
   },

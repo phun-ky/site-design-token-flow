@@ -69,4 +69,4 @@ See the [contributing guide](CONTRIBUTING.md) for how to report bugs, suggest ch
 
 ## Contributors
 
-[Stefano Tirloni](http://www.stedesign.com/)
+Original design by [Stefano Tirloni](http://www.stedesign.com/): [Design System Token Map App](https://dribbble.com/shots/14800796-Design-System-Token-Map-App) on Dribbble.

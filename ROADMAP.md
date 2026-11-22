@@ -26,8 +26,12 @@ once Figma approves the app.
 - **Up to 3 links**, one per token document in the playground. Once a link is
   published, your edits update it as you make them, and a link published on
   another device can be opened by name.
-- **Documents** can be deleted, with undo for 10 seconds, and edits with
-  problems can be reverted to the last version without them.
+- **Documents** can be deleted from their actions menu without opening them,
+  the last one included, with undo for 10 seconds. Edits with problems can be
+  reverted to the last version without them.
+- **One choice for both views:** the flow shows what the playground has chosen,
+  the showcase, the example file or one of your documents, and choosing in the
+  flow's sidebar chooses in the playground too.
 
 The steps were tracked in
 [#148](https://github.com/phun-ky/site-design-token-flow/issues/148), and the
@@ -61,9 +65,10 @@ issue first.
 
 - **A desktop app:** the site wrapped in Electron, for use offline. The site is
   built with relative paths so that it can be.
-- **Your own token file in the flow view:** open or drop a `*.tokens.json` file
-  to see its flow, as the playground does for single tokens. It would stay in
-  the browser, like the playground's.
+- **Opening a token file in the flow view:** open or drop a `*.tokens.json`
+  file on the flow itself. The flow already shows files loaded in the
+  playground, as one of your documents; this would skip that step. It would
+  stay in the browser, like the playground's.
 - **More than 3 published links**, on a paid plan
   ([#150](https://github.com/phun-ky/site-design-token-flow/issues/150)).
 - **Editing tokens in Figma and syncing them back** to the site, with Tokens

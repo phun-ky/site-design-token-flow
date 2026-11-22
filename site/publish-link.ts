@@ -91,7 +91,10 @@ export const mountPublishLink = (
   const currentDocument = () => {
     const { documents, current } = listDocuments(store);
 
-    return documents.find(({ id }) => id === current) as SavedDocument;
+    // None once every document is deleted: nothing published, nothing to publish
+    return (
+      documents.find(({ id }) => id === current) ?? { id: current, name: '' }
+    );
   };
   /** The same Tokens Studio JSON as the export; the converter loads when first needed */
   const tokensStudio = async (valid: string) => {

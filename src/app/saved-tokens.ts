@@ -73,6 +73,8 @@ interface Stored {
   /** The document the playground edits, and the flow view shows */
   current?: string;
   documents: SavedDocument[];
+  /** You deleted every document: none is listed, not even the first */
+  cleared?: boolean;
 }
 
 const isDocument = (value: unknown): value is SavedDocument => {
@@ -104,10 +106,8 @@ const readStored = (storage: TokenStorage | null): Stored => {
 
   if (typeof saved !== 'object' || saved === null) return { documents: [] };
 
-  const { preset, current, documents, custom, valid } = saved as Record<
-    string,
-    unknown
-  >;
+  const { preset, current, documents, custom, valid, cleared } =
+    saved as Record<string, unknown>;
 
   let list: SavedDocument[] = [];
 
@@ -139,14 +139,21 @@ const readStored = (storage: TokenStorage | null): Stored => {
     current: list.some((document) => document.id === current)
       ? (current as string)
       : list[0]?.id,
-    documents: list
+    documents: list,
+    ...(list.length === 0 && cleared === true && { cleared: true })
   };
 };
 const writeStored = (storage: TokenStorage | null, stored: Stored) => {
   if (!storage) return false;
 
+  // Only kept while there are no documents
+  const { cleared, ...rest } = stored;
+
   try {
-    storage.setItem(STORAGE_KEY, JSON.stringify(stored));
+    storage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(cleared && rest.documents.length === 0 ? stored : rest)
+    );
 
     return true;
   } catch {
@@ -156,7 +163,8 @@ const writeStored = (storage: TokenStorage | null, stored: Stored) => {
 
 /**
  * Your documents, and which one is current. With none saved yet, the first
- * document, empty.
+ * document, empty; once you have deleted every document, none (and no
+ * current one, an empty id).
  *
  * @param {TokenStorage | null} storage Where they are saved
  * @returns {{ documents: SavedDocument[]; current: string }} The documents
@@ -164,10 +172,12 @@ const writeStored = (storage: TokenStorage | null, stored: Stored) => {
 export const listDocuments = (
   storage: TokenStorage | null
 ): { documents: SavedDocument[]; current: string } => {
-  const { documents, current } = readStored(storage);
+  const { documents, current, cleared } = readStored(storage);
 
-  return documents.length > 0 && current
-    ? { documents, current }
+  if (documents.length > 0 && current) return { documents, current };
+
+  return cleared
+    ? { documents: [], current: '' }
     : { documents: [{ ...FIRST_DOCUMENT }], current: FIRST_DOCUMENT.id };
 };
 
@@ -312,8 +322,8 @@ export const renameDocument = (
 };
 
 /**
- * Deletes a document. The first one left becomes current; deleting the last
- * leaves the first document, empty.
+ * Deletes a document. The current one stays current; when that is the one
+ * deleted, the first one left. Deleting the last leaves none.
  *
  * @param {TokenStorage | null} storage Where it is saved
  * @param {string} id The document
@@ -329,7 +339,10 @@ export const deleteDocument = (
   return writeStored(storage, {
     ...stored,
     documents,
-    current: documents[0]?.id
+    current: documents.some((document) => document.id === stored.current)
+      ? stored.current
+      : documents[0]?.id,
+    ...(documents.length === 0 && { cleared: true })
   });
 };
 
@@ -451,10 +464,13 @@ export const chooseFlowTokens = (storage: TokenStorage | null): FlowTokens => {
   if (!storage) return { kind: 'example', reason: 'blocked' };
 
   const { preset = 'showcase', custom, valid } = readSaved(storage);
+  const { documents, current } = listDocuments(storage);
 
   if (preset !== 'custom') return { kind: 'preset', preset };
 
-  const { documents, current } = listDocuments(storage);
+  // Every document deleted: the playground shows the showcase then
+  if (documents.length === 0) return { kind: 'preset', preset: 'showcase' };
+
   const name =
     documents.find(({ id }) => id === current)?.name ?? FIRST_DOCUMENT.name;
   const latest = check(custom);

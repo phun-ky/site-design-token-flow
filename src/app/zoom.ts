@@ -59,8 +59,7 @@ export const stepScale = (scale: number, direction: 1 | -1): number => {
 
   return direction > 0
     ? (ZOOM_STEPS.find((step) => step > scale + epsilon) ?? MAX_SCALE)
-    : ([...ZOOM_STEPS].reverse().find((step) => step < scale - epsilon) ??
-        MIN_SCALE);
+    : (ZOOM_STEPS.findLast((step) => step < scale - epsilon) ?? MIN_SCALE);
 };
 
 /**

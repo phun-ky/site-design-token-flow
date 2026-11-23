@@ -8,21 +8,12 @@
 // Usage: npm run images:logo
 // Rendering uses the installed Google Chrome, the site's own IBM Plex Sans
 // files and its colour tokens from src/styles/app.css, so nothing is fetched
-// from the network; Python with Pillow then turns the opaque images into
-// palette PNGs. Run it again when the favicon or the tokens change, and commit
+// from the network; Python with Pillow then turns the images into palette
+// PNGs (see scripts/lib/render.mjs). Run it again when the favicon or the tokens change, and commit
 // the files.
 
-import { chromium } from '@playwright/test';
+import { palette, read, screenshots, url } from './lib/render.mjs';
 
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-
-const ROOT = fileURLToPath(new URL('../', import.meta.url));
-const read = (file) => readFileSync(join(ROOT, file), 'utf8');
-const url = (file) => pathToFileURL(join(ROOT, file)).href;
 const favicon = read('site/public/favicon.svg');
 /** The custom properties declared in the first block that matches */
 const tokens = (css, selector) => {
@@ -73,72 +64,29 @@ p { margin-top: 12px; font-size: 22px; line-height: 1.4; }
   ${favicon.replace('<svg ', '<svg class="mark" ')}
   <div><h1>Design Token Flow</h1><p>See how design tokens relate: every token a pill, every alias a line.</p></div>
 </div></body></html>`;
-const browser = await chromium.launch({ channel: 'chrome' });
-const dir = mkdtempSync(join(tmpdir(), 'logo-'));
-const written = [];
-const palette = [];
-/** Renders a page to a PNG, with a transparent background where it has none */
-const shoot = async (html, width, height, scale, out) => {
-  const file = join(dir, `${written.length}.html`);
-  const context = await browser.newContext({
-    viewport: { width, height },
-    deviceScaleFactor: scale
-  });
-  const tab = await context.newPage();
-
-  writeFileSync(file, html);
-  await tab.goto(pathToFileURL(file).href, { waitUntil: 'load' });
-  await tab.evaluate(() => document.fonts.ready);
-  await tab.screenshot({ path: join(ROOT, out), omitBackground: true });
-  await context.close();
-  written.push(out);
-};
-
-try {
-  for (const { svg, size, out, palette: small } of ICONS) {
-    await shoot(
-      `<style>*{margin:0}svg{display:block;width:${size}px;height:${size}px}</style>${svg}`,
-      size,
-      size,
-      1,
-      out
-    );
-
-    if (small) palette.push(out);
-  }
-
-  for (const [name, theme] of [
+const shots = [
+  ...ICONS.map(({ svg, size, out, palette: small }) => ({
+    html: `<style>*{margin:0}svg{display:block;width:${size}px;height:${size}px}</style>${svg}`,
+    width: size,
+    height: size,
+    scale: 1,
+    out,
+    small
+  })),
+  ...[
     ['light', LIGHT],
     ['dark', DARK]
-  ]) {
-    const out = `site/public/logo/banner-${name}.png`;
+  ].map(([name, theme]) => ({
+    html: banner(theme),
+    ...BANNER,
+    out: `site/public/logo/banner-${name}.png`,
+    small: true
+  }))
+];
 
-    await shoot(banner(theme), BANNER.width, BANNER.height, BANNER.scale, out);
-    palette.push(out);
-  }
-} finally {
-  await browser.close();
-  rmSync(dir, { recursive: true, force: true });
-}
+await screenshots(shots);
+// The 32 px favicon keeps full colour, since a palette makes its anti-aliased
+// edges ragged
+palette(shots.filter(({ small }) => small).map(({ out }) => out));
 
-// Palette PNGs are a fraction of the size. The 32 px favicon keeps full
-// colour, since a palette makes its anti-aliased edges ragged. An image
-// without transparent pixels, like the Apple touch icon, drops its alpha
-// channel, as iOS expects
-execFileSync(
-  'python3',
-  [
-    '-c',
-    `import sys
-from PIL import Image
-for path in sys.argv[1:]:
-    image = Image.open(path).convert('RGBA')
-    if image.getchannel('A').getextrema()[0] == 255:
-        image = image.convert('RGB')
-    image.quantize(256, method=Image.Quantize.FASTOCTREE).save(path, optimize=True)`,
-    ...palette.map((out) => join(ROOT, out))
-  ],
-  { stdio: 'inherit' }
-);
-
-for (const out of written) console.log(out);
+for (const { out } of shots) console.log(out);

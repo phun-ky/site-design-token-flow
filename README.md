@@ -15,55 +15,30 @@
 
 A site that shows design tokens and how they relate: every token is drawn as a "pill", and lines connect each token to the tokens it references.
 
-**Live:** <https://phun-ky.net/site-design-token-flow/>, deployed to GitHub Pages on every merge to `main`.
+**Live:** <https://phun-ky.net/site-design-token-flow/>
 
 > [!IMPORTANT]
 > The npm package `@phun-ky/design-token-flow` is deprecated and will not be updated. Its only usable feature, creating design token elements, will be published as its own package.
 
-## Using the site
+## What it does
 
-Nothing to install: open the site in a current browser. Both pages work with a keyboard, and the switch in the header changes between the light and dark theme.
+- **[Token flow](https://phun-ky.net/site-design-token-flow/)**: follow any token, such as a button background, through its aliases down to the base value it ends at.
+- **[Playground](https://phun-ky.net/site-design-token-flow/playground)**: edit [DTCG 2025.10](https://www.designtokens.org/tr/2025.10/) tokens and see them as pills while you type, with every problem listed.
+- Import DTCG or [Tokens Studio](https://tokens.studio/) JSON, and export to either format.
+- Publish a document as a link that Tokens Studio syncs from.
 
-**[Token flow](https://phun-ky.net/site-design-token-flow/)** shows every token as a pill: your own tokens from the playground, or the bundled example file. Base values are on the right, and each alias is joined by a line to the token it references, so you can follow a component token, such as a button background, down to the color it ends at. The sidebar says which tokens are shown, lets you switch between yours and the example, and lists how to move around. On a wide screen its button collapses it to a narrow rail, so the canvas gets the room, and it stays that way the next time; on a phone it folds into a bar with an "About this flow" button. A large flow says what it is drawing while it draws.
-
-- **Move around:** scroll with the mouse wheel or two fingers on a trackpad (Shift and the wheel moves sideways), or drag the canvas, with a finger on a touch screen. With the keyboard, focus it (Tab, or the "Skip to content" link) and use the arrow keys; Shift and an arrow key moves further.
-- **Zoom:** Ctrl (Cmd on a Mac) and the mouse wheel, or a pinch on a trackpad, zooms around the pointer. On a touch screen, pinch with two fingers to zoom around them, and move them together to pan. The zoom buttons in the corner or the `+` and `-` keys zoom in steps. 100% is the flow fitted to the page width: `0` goes back to it, and `F` or "Fit to screen" fits the whole flow on the screen.
-
-**[Playground](https://phun-ky.net/site-design-token-flow/playground)** renders single tokens as pills, so you can try your own. Its sidebar lists what you can edit: the showcase, the example file and your documents. The editor next to it has the open document's tools above it (its name, its link, Load files and Export) and its problems under it, and the pills' header has the prefix and "Show in the flow". On a wide screen the sidebar collapses to a narrow rail, remembered for next time.
-
-1. Pick the tokens to start from: a showcase with one token of every `$type`, the bundled token file, or your own. "Load files" opens one or more token files, DTCG or [Tokens Studio for Figma](https://tokens.studio/) JSON, up to 2 MB in all, and dropping them anywhere on the playground does the same. The files are read in your browser and never uploaded, with their progress and a Cancel button.
-2. Every file opens the import wizard; several files open it one after another, in the order given, each added on top of the ones before, so a later file overwrites a token of the same name, and references between the files resolve once all are in. Cancelling one stops the files after it. It says which format it detected, DTCG or Tokens Studio, and lets you read the file as the other one when the guess is wrong; a preview lists the file's tokens, the first 100 of a large file, before anything loads. For a Tokens Studio file, choose a theme, or which sets are included, used only for references, or left out, then review what the conversion to DTCG does, token by token: math worked out, references resolved, colour modifiers applied, values changed or filled in, tokens overridden by a later set, and tokens left out because DTCG has no type for them. When you already have tokens, any file can be added to them, overwriting tokens of the same name, or replace them; the review lists what is added and overwritten. A Tokens Studio file added to your tokens can refer to them: "Your tokens" shows as a reference only set, and those references stay references. When both came from Tokens Studio, an export to Tokens Studio has your sets and themes, then the file's.
-3. Edit the [DTCG 2025.10](https://www.designtokens.org/tr/2025.10/) JSON, or use "New token" to add one without writing JSON: a primitive, with an editor for its value, or a semantic token that refers to one you have, in an existing or a new group. The pills update as you type, and the tokens are checked in the background, so a large file doesn't hold up the page. Every problem is listed under the editor, naming the token and the field; select one to move the editor to its line. The valid tokens are still shown.
-4. Filter the pills by name or `$type`, and select a pill to see its token, resolved value, the tokens it references and the HTML that renders it, which you can copy. The details open next to the pills, or over the page on a phone; Esc or the close button closes them.
-5. "Export" downloads or copies your tokens as DTCG 2025.10 or as Tokens Studio JSON. Tokens that came from Tokens Studio go back as they came, with their sets, themes, math and modifiers, and your new tokens in the set you choose.
-6. "Publish", above the editor, opens the document's link: "Publish link", once you sign in with GitHub, Google or Figma, publishes a document as a link that [Tokens Studio](https://tokens.studio/) syncs from: in Tokens Studio, Settings, Sync providers, Add new, URL, and paste the link. Your edits without problems update it 2 seconds later, and Tokens Studio shows that there is something to pull. Anyone with the link can read the tokens; "Change link" and "Unpublish" stop the old one working. Up to 3 links per account. Signed in on another device, the playground lists your links that aren't in that browser, to open them as documents that keep updating the same link; if a link changed elsewhere since, it asks which version to keep before updating it.
-
-What you type in the playground is saved in your browser, so it is there when you come back, and "Show in the flow" draws it in the flow view. Keep several token documents side by side with "New document", and switch between them under "Start from". Editing the showcase or the example file starts a new document, so yours are never overwritten. A deleted document can be restored with "Undo" for 10 seconds, and "Revert" takes edits with problems back to the last version without. While your edits have problems, the flow shows the last version without. Nothing is sent anywhere: the [security policy](SECURITY.md#security-expectations) lists what the site stores and where.
+Your tokens stay in your browser unless you publish them. The [security policy](SECURITY.md#security-expectations) lists what is stored and where.
 
 ## Development
 
 ```shell
 npm i
-npm run dev       # http://localhost:5173: flow view, and the pill playground at /playground
+npm run dev    # http://localhost:5173
 npm test
-npm run build     # the site, in dist/
-npm run preview   # serve dist/
-npm run test:e2e  # build, then check the site in Google Chrome (see below)
+npm run build
 ```
 
-`npm run test:e2e` serves `dist/` like GitHub Pages (`e2e/serve.mjs`, gzipped, under `/site-design-token-flow/`) and runs the Playwright checks in `e2e/` with the installed Google Chrome: requests only to the site's own origin and no console errors, no horizontal scroll at 390, 768 and 1440 px in both themes, no axe violations (WCAG 2.2 A and AA) on any page in either theme, every link and referenced file resolves, zoom, pan, fit, the theme switch and the playground work, script and markup typed into the playground stay text, every page carries its Content Security Policy, the icons, banners and social card are served at their sizes with the mark at 3:1 contrast or more, and each page stays within its performance budget on a throttled phone, the flow view also with a generated file of 976 tokens (`e2e/performance.spec.ts`). CI runs them as "Website checks" and keeps the traces of a failed check.
-
-## Structure
-
-- `site/`: the site's pages. `index.html` is the flow view, `playground.html` lets you edit token JSON and inspect the rendered pills.
-- `src/main.ts`: the flow view. It lays tokens out in columns and draws the lines with [`@phun-ky/arclace`](https://www.npmjs.com/package/@phun-ky/arclace).
-- `src/assets/data/design-tokens.tokens.json`: the tokens shown, in the [DTCG 2025.10](https://www.designtokens.org/tr/2025.10/) format.
-- `src/assets/shiki/`: the code themes of the other phun-ky docs sites, used by the playground's syntax highlighting.
-- `site/public/`: copied to the build as they are: the favicon (`favicon.svg`, with `favicon-32.png` and `apple-touch-icon.png` rendered from it by `npm run images:logo`), the wave mark in `logo/` (`mark.svg` for light backgrounds, `mark-dark.svg`, and `mark-mono.svg` in `currentColor`) with the README banners rendered from the favicon, the social card `og-image.png` (1200 by 630, rendered from the site's own pills in a headless browser), and `404.html` with `404.css`, which GitHub Pages serves for any missing path, so its URLs are absolute.
-- `site/public/fonts/`: the site's own fonts and the ones the example tokens describe, each with its license:
-  - Inter 4.1 for text (`InterVariable.woff2`, [SIL Open Font License 1.1](site/public/fonts/LICENSE-Inter.txt)) and DejaVu Sans Mono 2.37 for pills and code (`DejaVuSansMono*.woff2`, [license](site/public/fonts/LICENSE-DejaVu.txt)), cut down to Latin. Set in `src/styles/app.css`, after SF Pro Text where it is installed; its license doesn't allow serving it.
-  - The IBM Plex Sans files the font tokens describe ([SIL Open Font License 1.1](site/public/fonts/LICENSE.txt)). Both pages load them from the tokens, so each font pill is shown in its own face.
-- `src/tokens/`: parses token files and renders pills. It is self-contained and will be extracted into its own package; see [its README](src/tokens/README.md).
+The [contributing guide](CONTRIBUTING.md) has the architecture, all scripts and the checks.
 
 ## Contributing
 
@@ -72,3 +47,24 @@ See the [contributing guide](CONTRIBUTING.md) for how to report bugs, suggest ch
 ## Contributors
 
 Original design by [Stefano Tirloni](http://www.stedesign.com/): [Design System Token Map App](https://dribbble.com/shots/14800796-Design-System-Token-Map-App) on Dribbble.
+
+## License
+
+The code is released under the [MIT License](LICENSE).
+
+The bundled fonts keep their own licenses:
+
+- [Inter](site/public/fonts/LICENSE-Inter.txt) and [IBM Plex Sans](site/public/fonts/LICENSE.txt): SIL Open Font License 1.1
+- [DejaVu Sans Mono](site/public/fonts/LICENSE-DejaVu.txt): Bitstream Vera license
+
+## Sponsor me
+
+I'm an Open Source evangelist, creating stuff that does not exist yet to help
+get rid of secondary activities and to enhance systems already in place, be it
+documentation or web sites.
+
+The sponsorship is an unique opportunity to alleviate more hours for me to
+maintain my projects, create new ones and contribute to the large community
+we're all part of :)
+
+[Support me on GitHub Sponsors](https://github.com/sponsors/phun-ky).

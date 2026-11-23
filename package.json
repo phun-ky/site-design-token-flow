@@ -27,7 +27,8 @@
     "check:colours": "node --import tsx scripts/check-colours.mjs",
     "check:supabase": "node scripts/check-supabase-storage.mjs",
     "test:db": "supabase test db",
-    "images:logo": "node scripts/render-logo.mjs"
+    "images:logo": "node scripts/render-logo.mjs",
+    "banners": "node --import tsx scripts/banners/render.mjs"
   },
   "repository": {
     "type": "git",

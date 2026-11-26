@@ -58,7 +58,7 @@
     "eslint-config-phun-ky": "^2.0.10",
     "fast-check": "^4.10.3",
     "git-cz": "^4.9.0",
-    "global-jsdom": "^30.0.0",
+    "global-jsdom": "^31.0.0",
     "globals": "^17.14.0",
     "html-validate": "^11.19.0",
     "jsdom": "^30.1.3",
